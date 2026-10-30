@@ -29,7 +29,6 @@ document.body.addEventListener('touchmove', (e) => {
   
   if (pullDist > 0) {
     indicator.classList.add('pulling');
-    const pullPercent = Math.min(pullDist / 100, 1);
     indicator.style.transform = `translateX(-50%) rotate(${pullDist * 2}deg)`;
     indicator.style.top = `${-60 + (pullDist * 1.5)}px`;
   }
