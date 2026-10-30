@@ -10,6 +10,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/correspondenceadg-cmyk/Xochi/guardian"
@@ -21,6 +22,7 @@ type Server struct {
 	Now        func() int64
 	TickSecret string
 	GraceSecs  int64
+	lastTick   atomic.Int64
 }
 
 func New(st Store, n Notifier, tickSecret string) *Server {
@@ -40,7 +42,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/contact/verify/{token}", s.verify)
 	mux.HandleFunc("POST /v1/contact/ack/{token}", s.ack)
 	mux.HandleFunc("GET /v1/contact/revoke/{token}", s.revoke)
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("ok")) })
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, 200, map[string]any{"status": "ok", "last_tick_at": s.lastTick.Load()})
+	})
 	return mux
 }
 
@@ -233,6 +237,7 @@ func (s *Server) tick(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.lastTick.Store(s.Now())
 	s.Store.Prune(r.Context(), s.Now())
 
 	processed, alerts := 0, 0
@@ -249,7 +254,6 @@ func (s *Server) tick(w http.ResponseWriter, r *http.Request) {
 					contactToNotify = t.Contacts[t.NextContactPriority-1]
 					ackToken = newID()
 
-					// Advance here to prevent concurrent ticks from picking it up
 					t.LastAlertAt = s.Now()
 					t.NextContactPriority++
 					if t.NextContactPriority > len(t.Contacts) {
@@ -272,7 +276,6 @@ func (s *Server) tick(w http.ResponseWriter, r *http.Request) {
 			s.Store.SetAckToken(r.Context(), id, contactToNotify, ackToken)
 			err := s.deliver(r.Context(), id, contactToNotify, ackToken, *alert)
 			if err != nil {
-				// Rewind so the next tick retries immediately
 				s.Store.Update(r.Context(), id, func(t *Trip) error {
 					if t.LastAlertAt == s.Now() {
 						t.LastAlertAt = 0
