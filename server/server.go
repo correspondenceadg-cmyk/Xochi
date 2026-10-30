@@ -45,7 +45,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, 200, map[string]any{"status": "ok", "last_tick_at": s.lastTick.Load()})
 	})
-	return mux
+	return cors(mux)
 }
 
 // newID() -> 32 hex chars; possession authorizes every call on that interval
