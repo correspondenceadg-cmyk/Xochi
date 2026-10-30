@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"sync"
 
@@ -20,10 +21,11 @@ type Trip struct {
 }
 
 type Store interface {
-	Create(t *Trip) error
-	Update(id string, fn func(*Trip) error) error
-	Get(id string) (Trip, error)
-	Pending() []string
+	Create(ctx context.Context, t *Trip) error
+	Update(ctx context.Context, id string, fn func(*Trip) error) error
+	Get(ctx context.Context, id string) (Trip, error)
+	Pending(ctx context.Context) []string
+	Prune(ctx context.Context, now int64) error
 }
 
 type MemStore struct {
@@ -33,14 +35,14 @@ type MemStore struct {
 
 func NewMemStore() *MemStore { return &MemStore{m: map[string]*Trip{}} }
 
-func (s *MemStore) Create(t *Trip) error {
+func (s *MemStore) Create(ctx context.Context, t *Trip) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.m[t.ID] = t
 	return nil
 }
 
-func (s *MemStore) Update(id string, fn func(*Trip) error) error {
+func (s *MemStore) Update(ctx context.Context, id string, fn func(*Trip) error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	t, ok := s.m[id]
@@ -50,7 +52,7 @@ func (s *MemStore) Update(id string, fn func(*Trip) error) error {
 	return fn(t)
 }
 
-func (s *MemStore) Get(id string) (Trip, error) {
+func (s *MemStore) Get(ctx context.Context, id string) (Trip, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	t, ok := s.m[id]
@@ -60,7 +62,7 @@ func (s *MemStore) Get(id string) (Trip, error) {
 	return *t, nil
 }
 
-func (s *MemStore) Pending() []string {
+func (s *MemStore) Pending(ctx context.Context) []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var ids []string
@@ -75,4 +77,17 @@ func (s *MemStore) Pending() []string {
 		}
 	}
 	return ids
+}
+
+func (s *MemStore) Prune(ctx context.Context, now int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, t := range s.m {
+		if t.ClosedAt > 0 && t.ClosedAt < now-86400 {
+			t.HasLoc = false
+			t.Lat, t.Lon = 0, 0
+			t.LocAt = 0
+		}
+	}
+	return nil
 }

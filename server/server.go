@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/hex"
@@ -97,7 +98,7 @@ func (s *Server) open(w http.ResponseWriter, r *http.Request) {
 		Interval: *guardian.New(newID(), now, int64(in.WindowMinutes)*60, s.GraceSecs),
 		Contacts: in.Contacts, Message: in.Message,
 	}
-	if err := s.Store.Create(t); err != nil {
+	if err := s.Store.Create(r.Context(), t); err != nil {
 		writeJSON(w, 500, map[string]string{"error": "internal"})
 		return
 	}
@@ -113,7 +114,7 @@ func (s *Server) extend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var exp int64
-	err := s.Store.Update(r.PathValue("id"), func(t *Trip) error {
+	err := s.Store.Update(r.Context(), r.PathValue("id"), func(t *Trip) error {
 		if err := t.Extend(s.Now(), int64(in.Minutes)*60); err != nil {
 			return err
 		}
@@ -128,7 +129,7 @@ func (s *Server) extend(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) safe(w http.ResponseWriter, r *http.Request) {
-	err := s.Store.Update(r.PathValue("id"), func(t *Trip) error {
+	err := s.Store.Update(r.Context(), r.PathValue("id"), func(t *Trip) error {
 		if err := t.Release(s.Now()); err != nil {
 			return err
 		}
@@ -146,7 +147,7 @@ func (s *Server) safe(w http.ResponseWriter, r *http.Request) {
 func (s *Server) distress(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var alert *guardian.Alert
-	err := s.Store.Update(id, func(t *Trip) error {
+	err := s.Store.Update(r.Context(), id, func(t *Trip) error {
 		a, err := t.Distress(s.Now())
 		alert = a
 		return err
@@ -155,7 +156,7 @@ func (s *Server) distress(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	s.deliver(id, *alert)
+	s.deliver(r.Context(), id, *alert)
 	writeJSON(w, 200, map[string]any{"state": guardian.Distress})
 }
 
@@ -167,7 +168,7 @@ func (s *Server) ping(w http.ResponseWriter, r *http.Request) {
 	}
 	var st guardian.State
 	var exp int64
-	err := s.Store.Update(r.PathValue("id"), func(t *Trip) error {
+	err := s.Store.Update(r.Context(), r.PathValue("id"), func(t *Trip) error {
 		if t.State.Closed() {
 			return guardian.ErrClosed
 		}
@@ -183,7 +184,7 @@ func (s *Server) ping(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) status(w http.ResponseWriter, r *http.Request) {
-	t, err := s.Store.Get(r.PathValue("id"))
+	t, err := s.Store.Get(r.Context(), r.PathValue("id"))
 	if err != nil {
 		fail(w, err)
 		return
@@ -199,10 +200,13 @@ func (s *Server) tick(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 401, map[string]string{"error": "unauthorized"})
 		return
 	}
+
+	s.Store.Prune(r.Context(), s.Now())
+
 	processed, alerts := 0, 0
-	for _, id := range s.Store.Pending() {
+	for _, id := range s.Store.Pending(r.Context()) {
 		var alert *guardian.Alert
-		err := s.Store.Update(id, func(t *Trip) error {
+		err := s.Store.Update(r.Context(), id, func(t *Trip) error {
 			if !t.State.Closed() {
 				alert = t.Tick(s.Now())
 			} else if !t.Notified {
@@ -216,18 +220,18 @@ func (s *Server) tick(w http.ResponseWriter, r *http.Request) {
 		processed++
 		if alert != nil {
 			alerts++
-			s.deliver(id, *alert)
+			s.deliver(r.Context(), id, *alert)
 		}
 	}
 	writeJSON(w, 200, map[string]any{"processed": processed, "alerts": alerts, "at": s.Now()})
 }
 
-func (s *Server) deliver(id string, a guardian.Alert) {
-	t, err := s.Store.Get(id)
+func (s *Server) deliver(ctx context.Context, id string, a guardian.Alert) {
+	t, err := s.Store.Get(ctx, id)
 	if err != nil {
 		return
 	}
 	if s.Notifier.Notify(t, a) == nil {
-		s.Store.Update(id, func(t *Trip) error { t.Notified = true; return nil })
+		s.Store.Update(ctx, id, func(t *Trip) error { t.Notified = true; return nil })
 	}
 }
