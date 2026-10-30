@@ -34,7 +34,17 @@ func main() {
 		log.Println("using memory store")
 	}
 
-	s := server.New(st, server.LogNotifier{}, secret)
+	var n server.Notifier
+	resendKey := os.Getenv("RESEND_KEY")
+	if resendKey != "" {
+		n = server.ResendNotifier{APIKey: resendKey, From: "alerts@xochi.app"}
+		log.Println("using Resend notifier")
+	} else {
+		n = server.LogNotifier{}
+		log.Println("using Log notifier")
+	}
+
+	s := server.New(st, n, secret)
 	log.Printf("listening on :%s", port)
 	log.Fatal(http.ListenAndServe(":"+port, s.Handler()))
 }

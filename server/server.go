@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
@@ -36,6 +37,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/interval/{id}/ping", s.ping)
 	mux.HandleFunc("GET /v1/interval/{id}/status", s.status)
 	mux.HandleFunc("POST /v1/tick", s.tick)
+	mux.HandleFunc("GET /v1/contact/verify/{token}", s.verify)
+	mux.HandleFunc("POST /v1/contact/ack/{token}", s.ack)
+	mux.HandleFunc("GET /v1/contact/revoke/{token}", s.revoke)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("ok")) })
 	return mux
 }
@@ -97,11 +101,26 @@ func (s *Server) open(w http.ResponseWriter, r *http.Request) {
 	t := &Trip{
 		Interval: *guardian.New(newID(), now, int64(in.WindowMinutes)*60, s.GraceSecs),
 		Contacts: in.Contacts, Message: in.Message,
+		NextContactPriority: 1,
 	}
 	if err := s.Store.Create(r.Context(), t); err != nil {
 		writeJSON(w, 500, map[string]string{"error": "internal"})
 		return
 	}
+
+	for _, c := range in.Contacts {
+		verified, err := s.Store.GetConsent(r.Context(), c)
+		if err != nil {
+			continue
+		}
+		if !verified {
+			token := newID()
+			hash := sha256.Sum256([]byte(token))
+			s.Store.CreateConsent(r.Context(), c, hex.EncodeToString(hash[:]))
+			s.Notifier.SendConsent(c, "Guardian", token)
+		}
+	}
+
 	writeJSON(w, 201, map[string]any{"id": t.ID, "expires_at": t.ExpiresAt})
 }
 
@@ -147,16 +166,29 @@ func (s *Server) safe(w http.ResponseWriter, r *http.Request) {
 func (s *Server) distress(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var alert *guardian.Alert
+	var contactsToNotify []string
+	var ackTokens []string
 	err := s.Store.Update(r.Context(), id, func(t *Trip) error {
 		a, err := t.Distress(s.Now())
+		if err != nil {
+			return err
+		}
 		alert = a
-		return err
+		t.Notified = true
+		for _, c := range t.Contacts {
+			contactsToNotify = append(contactsToNotify, c)
+			ackTokens = append(ackTokens, newID())
+		}
+		return nil
 	})
 	if err != nil {
 		fail(w, err)
 		return
 	}
-	s.deliver(r.Context(), id, *alert)
+	for i, c := range contactsToNotify {
+		s.Store.SetAckToken(r.Context(), id, c, ackTokens[i])
+		s.deliver(r.Context(), id, c, ackTokens[i], *alert)
+	}
 	writeJSON(w, 200, map[string]any{"state": guardian.Distress})
 }
 
@@ -206,11 +238,28 @@ func (s *Server) tick(w http.ResponseWriter, r *http.Request) {
 	processed, alerts := 0, 0
 	for _, id := range s.Store.Pending(r.Context()) {
 		var alert *guardian.Alert
+		var contactToNotify string
+		var ackToken string
+
 		err := s.Store.Update(r.Context(), id, func(t *Trip) error {
 			if !t.State.Closed() {
 				alert = t.Tick(s.Now())
 			} else if !t.Notified {
-				alert = &guardian.Alert{Kind: t.State, At: t.ClosedAt}
+				if t.NextContactPriority <= len(t.Contacts) && (t.LastAlertAt == 0 || s.Now()-t.LastAlertAt >= 300) {
+					contactToNotify = t.Contacts[t.NextContactPriority-1]
+					ackToken = newID()
+
+					// Advance here to prevent concurrent ticks from picking it up
+					t.LastAlertAt = s.Now()
+					t.NextContactPriority++
+					if t.NextContactPriority > len(t.Contacts) {
+						t.Notified = true
+					}
+
+					if alert == nil {
+						alert = &guardian.Alert{Kind: t.State, At: t.ClosedAt}
+					}
+				}
 			}
 			return nil
 		})
@@ -218,20 +267,61 @@ func (s *Server) tick(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		processed++
-		if alert != nil {
+		if alert != nil && contactToNotify != "" {
 			alerts++
-			s.deliver(r.Context(), id, *alert)
+			s.Store.SetAckToken(r.Context(), id, contactToNotify, ackToken)
+			err := s.deliver(r.Context(), id, contactToNotify, ackToken, *alert)
+			if err != nil {
+				// Rewind so the next tick retries immediately
+				s.Store.Update(r.Context(), id, func(t *Trip) error {
+					if t.LastAlertAt == s.Now() {
+						t.LastAlertAt = 0
+						t.NextContactPriority--
+					}
+					return nil
+				})
+			}
 		}
 	}
 	writeJSON(w, 200, map[string]any{"processed": processed, "alerts": alerts, "at": s.Now()})
 }
 
-func (s *Server) deliver(ctx context.Context, id string, a guardian.Alert) {
+func (s *Server) deliver(ctx context.Context, id, contact, ackToken string, a guardian.Alert) error {
 	t, err := s.Store.Get(ctx, id)
 	if err != nil {
+		return err
+	}
+	return s.Notifier.SendAlert(t, contact, ackToken)
+}
+
+func (s *Server) verify(w http.ResponseWriter, r *http.Request) {
+	token := r.PathValue("token")
+	hash := sha256.Sum256([]byte(token))
+	err := s.Store.VerifyConsent(r.Context(), hex.EncodeToString(hash[:]))
+	if err != nil {
+		fail(w, err)
 		return
 	}
-	if s.Notifier.Notify(t, a) == nil {
-		s.Store.Update(ctx, id, func(t *Trip) error { t.Notified = true; return nil })
+	w.Write([]byte("verified"))
+}
+
+func (s *Server) ack(w http.ResponseWriter, r *http.Request) {
+	token := r.PathValue("token")
+	err := s.Store.Ack(r.Context(), token)
+	if err != nil {
+		fail(w, err)
+		return
 	}
+	w.Write([]byte("acknowledged"))
+}
+
+func (s *Server) revoke(w http.ResponseWriter, r *http.Request) {
+	token := r.PathValue("token")
+	hash := sha256.Sum256([]byte(token))
+	err := s.Store.RevokeConsent(r.Context(), hex.EncodeToString(hash[:]))
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	w.Write([]byte("revoked"))
 }

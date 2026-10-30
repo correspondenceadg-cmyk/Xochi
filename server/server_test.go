@@ -16,11 +16,13 @@ type fakeNotifier struct {
 	fail bool
 }
 
-func (f *fakeNotifier) Notify(t Trip, a guardian.Alert) error {
+func (f *fakeNotifier) SendConsent(to, from, token string) error { return nil }
+
+func (f *fakeNotifier) SendAlert(t Trip, to, ackToken string) error {
 	if f.fail {
 		return errors.New("smtp down")
 	}
-	f.sent = append(f.sent, a.Kind)
+	f.sent = append(f.sent, t.State)
 	return nil
 }
 
@@ -89,7 +91,7 @@ func TestTimeoutAlertsOnce(t *testing.T) {
 	h := newHarness(t)
 	h.open()
 	h.now = 600
-	h.tick() // enters grace
+	h.tick()
 	h.now = 899
 	h.tick()
 	if len(h.n.sent) != 0 {
