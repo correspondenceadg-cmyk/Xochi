@@ -1,0 +1,7 @@
+.env
+.env.*
+*.pem
+/bin/
+/guardian-bin
+*.test
+*.out
