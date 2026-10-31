@@ -1,3 +1,4 @@
+import { renderCover } from "./cover";
 const API_BASE = 'https://xochi.deplexo.com';
 
 let state = { id: '', expiresAt: 0, timerInterval: 0 };
@@ -223,4 +224,16 @@ if (savedId) {
   refreshState();
 } else {
   renderBind();
+}
+
+// Routing
+if (window.location.pathname === '/cover' || window.location.hash === '#cover') {
+  renderCover();
+} else {
+  const savedId = localStorage.getItem('trip_id');
+  if (savedId) {
+    refreshState();
+  } else {
+    renderBind();
+  }
 }
