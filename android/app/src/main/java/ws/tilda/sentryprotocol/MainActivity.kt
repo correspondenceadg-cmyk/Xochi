@@ -18,7 +18,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -118,7 +117,7 @@ fun XochiHomeScreen(onStartTrip: (Int) -> Unit) {
     var selectedMinutes by remember { mutableStateOf(10) }
     val times = listOf(5, 10, 15, 30)
 
-    val customFont = FontFamily(Font(R.font.el_abogado_loco))
+    val customFont = FontFamily(androidx.compose.ui.text.font.Font(R.font.el_abogado_loco))
 
     Column(
         modifier = Modifier.fillMaxSize().background(Color(0xFF0F172A)).padding(32.dp),
