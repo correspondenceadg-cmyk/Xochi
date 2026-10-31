@@ -1,5 +1,4 @@
-# Threshold Guardian
-
+# Xochi
 Trip-scoped safety check-in. See PROJECT_OPMAP for the full plan.
 
 ## Run locally
