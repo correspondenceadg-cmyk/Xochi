@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -47,6 +49,15 @@ class MainActivity : ComponentActivity() {
     private val client = OkHttpClient()
     private val API_BASE = "https://xochi.deplexo.com"
 
+    private val permissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
+        val fine = grants[Manifest.permission.ACCESS_FINE_LOCATION] == true
+        if (fine && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            bgPermissionLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+        }
+    }
+
+    private val bgPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -61,7 +72,11 @@ class MainActivity : ComponentActivity() {
             prefs.edit().remove("active_trip_id").remove("active_trip_expires_at").apply()
         }
 
-        requestPermissions()
+        permissionLauncher.launch(arrayOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.POST_NOTIFICATIONS
+        ))
+
         setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
                 AppRoot(
@@ -75,6 +90,17 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    private fun vibrate() {
+        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+            vibratorManager.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        }
+        vibrator.vibrate(android.os.VibrationEffect.createOneShot(100, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
     }
 
     private fun startTrip(minutes: Int) {
@@ -100,13 +126,7 @@ class MainActivity : ComponentActivity() {
                 runOnUiThread {
                     tripId = newId
                     expiresAt = newExp
-                    val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as android.os.Vibrator
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        vibrator.vibrate(android.os.VibrationEffect.createOneShot(100, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
-                    } else {
-                        @Suppress("DEPRECATION")
-                        vibrator.vibrate(100)
-                    }
+                    vibrate()
                 }
             } catch (e: Exception) { }
         }
@@ -123,7 +143,7 @@ class MainActivity : ComponentActivity() {
                 val obj = JSONObject(res.body?.string() ?: "")
                 val newExp = obj.getLong("expires_at")
                 prefs.edit().putLong("active_trip_expires_at", newExp).apply()
-                runOnUiThread { expiresAt = newExp }
+                runOnUiThread { expiresAt = newExp; vibrate() }
             } catch (e: Exception) { }
         }
     }
@@ -196,20 +216,6 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-
-    private fun requestPermissions() {
-        val launcher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
-            val fine = grants[Manifest.permission.ACCESS_FINE_LOCATION] == true
-            if (fine && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                val bgLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
-                bgLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
-            }
-        }
-        launcher.launch(arrayOf(
-            Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.POST_NOTIFICATIONS
-        ))
-    }
 }
 
 // AppRoot
@@ -258,7 +264,7 @@ fun SplashScreen() {
     ) {
         Image(painter = painterResource(id = R.drawable.logo), contentDescription = "Logo", modifier = Modifier.size(200.dp))
         Spacer(modifier = Modifier.height(24.dp))
-        Text("Xochi", color = Color.White, fontSize = 56.sp, fontFamily = FontFamily(androidx.compose.ui.text.font.Font(R.font.el_abogado_loco)))
+        Text("Xochi", color = Color.White, fontSize = 56.sp, fontFamily = FontFamily.Serif)
     }
 }
 
@@ -268,7 +274,6 @@ fun SplashScreen() {
 fun HomeScreen(onStartTrip: (Int) -> Unit, onOpenSettings: () -> Unit, onOpenCover: () -> Unit) {
     var selectedMinutes by remember { mutableStateOf(10) }
     val times = listOf(5, 10, 15, 30)
-    val customFont = FontFamily(androidx.compose.ui.text.font.Font(R.font.el_abogado_loco))
 
     Box(modifier = Modifier.fillMaxSize().background(Color(0xFF0F172A))) {
         IconButton(onClick = onOpenSettings, modifier = Modifier.align(Alignment.TopEnd).padding(16.dp)) {
@@ -282,14 +287,14 @@ fun HomeScreen(onStartTrip: (Int) -> Unit, onOpenSettings: () -> Unit, onOpenCov
         ) {
             Image(painter = painterResource(id = R.drawable.logo), contentDescription = "Logo", modifier = Modifier.size(160.dp))
             Spacer(modifier = Modifier.height(24.dp))
-            Text("Xochi", color = Color.White, fontSize = 48.sp, fontFamily = customFont)
+            Text("Xochi", color = Color.White, fontSize = 48.sp, fontFamily = FontFamily.Serif)
             Spacer(modifier = Modifier.height(16.dp))
             Text(
                 "A trip-scoped safety check-in. Set a timer for your walk. If you don't tap \"Safe\" before time runs out, we'll alert your emergency contact.",
                 color = Color(0xFF94A3B8),
                 fontSize = 16.sp,
                 textAlign = TextAlign.Center,
-                fontFamily = customFont
+                fontFamily = FontFamily.Serif
             )
             Spacer(modifier = Modifier.height(32.dp))
 
