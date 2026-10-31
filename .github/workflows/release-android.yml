@@ -41,6 +41,7 @@ jobs:
           cd android
           gradle assembleRelease
 
-      - uses: softprops/action-gh-release@v1
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
         with:
           files: android/app/build/outputs/apk/release/app-release.apk
