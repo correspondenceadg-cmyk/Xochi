@@ -18,9 +18,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.Font
-import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -119,6 +118,8 @@ fun XochiHomeScreen(onStartTrip: (Int) -> Unit) {
     var selectedMinutes by remember { mutableStateOf(10) }
     val times = listOf(5, 10, 15, 30)
 
+    val customFont = FontFamily(Font(R.font.el_abogado_loco))
+
     Column(
         modifier = Modifier.fillMaxSize().background(Color(0xFF0F172A)).padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -134,7 +135,7 @@ fun XochiHomeScreen(onStartTrip: (Int) -> Unit) {
             "Xochi",
             color = Color.White,
             fontSize = 48.sp,
-            fontFamily = FontFamily.Serif FontFamily(Font(R.font.el_abogado_loco))
+            fontFamily = customFont
         )
         Spacer(modifier = Modifier.height(16.dp))
         Text(
@@ -142,7 +143,7 @@ fun XochiHomeScreen(onStartTrip: (Int) -> Unit) {
             color = Color(0xFF94A3B8),
             fontSize = 16.sp,
             textAlign = TextAlign.Center,
-            fontFamily = FontFamily.Serif FontFamily(Font(R.font.el_abogado_loco))
+            fontFamily = customFont
         )
         Spacer(modifier = Modifier.height(32.dp))
 
@@ -170,7 +171,7 @@ fun XochiHomeScreen(onStartTrip: (Int) -> Unit) {
             modifier = Modifier.fillMaxWidth().height(56.dp),
             shape = RoundedCornerShape(8.dp)
         ) {
-            Text("Start Walk", fontSize = 18.sp, color = Color.Black, maxLines = 1)
+            Text("Start Walk", fontSize = 18.sp, color = Color.Black, maxLines = 1, softWrap = false)
         }
     }
 }
