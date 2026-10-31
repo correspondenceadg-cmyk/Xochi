@@ -29,24 +29,23 @@ jobs:
           gradle-version: 8.2
 
       - name: Decode Keystore
-        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/xochi-release.keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/xochi-release.keystore
+          ls -lh android/xochi-release.keystore
+
+      - name: Create keystore.properties
+        run: |
+          cat > android/keystore.properties <<PROPERTIES
+          storeFile=xochi-release.keystore
+          storePassword=${{ secrets.KEYSTORE_PASSWORD }}
+          keyAlias=xochi
+          keyPassword=${{ secrets.KEY_PASSWORD }}
+          PROPERTIES
 
       - name: Build Signed Release
         run: |
           cd android
-          gradle assembleRelease \
-            -PKEYSTORE_PATH=xochi-release.keystore \
-            -PKEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }} \
-            -PKEY_ALIAS=xochi \
-            -PKEY_PASSWORD=${{ secrets.KEY_PASSWORD }}
-
-      - name: Verify APK Exists
-        run: |
-          if [ ! -f android/app/build/outputs/apk/release/app-release.apk ]; then
-            echo "ERROR: APK not found. Here are the build outputs:"
-            ls -R android/app/build/outputs/apk/
-            exit 1
-          fi
+          gradle assembleRelease
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
