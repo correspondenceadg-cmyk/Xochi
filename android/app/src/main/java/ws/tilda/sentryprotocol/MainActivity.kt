@@ -1,4 +1,4 @@
-package com.xochi.app
+package ws.tilda.sentryprotocol
 
 import android.Manifest
 import android.content.Intent
@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -132,7 +133,7 @@ fun XochiHomeScreen(onStartTrip: (Int) -> Unit) {
             "Xochi",
             color = Color.White,
             fontSize = 48.sp,
-            fontFamily = FontFamily.Serif // FontFamily(Font(R.font.el_abogado_loco))
+            fontFamily = FontFamily.Serif FontFamily(Font(R.font.el_abogado_loco))
         )
         Spacer(modifier = Modifier.height(16.dp))
         Text(
@@ -140,7 +141,7 @@ fun XochiHomeScreen(onStartTrip: (Int) -> Unit) {
             color = Color(0xFF94A3B8),
             fontSize = 16.sp,
             textAlign = TextAlign.Center,
-            fontFamily = FontFamily.Serif // FontFamily(Font(R.font.el_abogado_loco))
+            fontFamily = FontFamily.Serif FontFamily(Font(R.font.el_abogado_loco))
         )
         Spacer(modifier = Modifier.height(32.dp))
 

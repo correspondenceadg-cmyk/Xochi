@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "com.xochi.app"
+    namespace = "ws.tilda.sentryprotocol"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.xochi.app"
+        applicationId = "ws.tilda.sentryprotocol"
         minSdk = 26
         targetSdk = 34
         versionCode = 1

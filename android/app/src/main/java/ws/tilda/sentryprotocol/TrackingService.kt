@@ -1,4 +1,4 @@
-package com.xochi.app
+package ws.tilda.sentryprotocol
 
 import android.app.Notification
 import android.app.NotificationChannel
