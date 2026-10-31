@@ -7,9 +7,11 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -111,18 +113,22 @@ fun AppRoot(onStartTrip: (Int) -> Unit, onPanic: () -> Unit) {
     val prefs = context.getSharedPreferences("xochi_prefs", Context.MODE_PRIVATE)
 
     var showSplash by remember { mutableStateOf(true) }
-    var isCoverMode by remember { mutableStateOf(prefs.getBoolean("stealth_mode", false)) }
+    var isCoverMode by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
 
+    LaunchedEffect(Unit) {
+        delay(2000)
+        showSplash = false
+    }
+
     if (showSplash) {
-        SplashScreen {
-            delay(2000)
-            showSplash = false
-        }
+        SplashScreen()
     } else if (showSettings) {
         SettingsScreen(
             prefs = prefs,
-            onClose = { showSettings = false; isCoverMode = prefs.getBoolean("stealth_mode", false) }
+            onClose = { 
+                showSettings = false
+            }
         )
     } else if (isCoverMode) {
         TimerCoverScreen(
@@ -133,7 +139,8 @@ fun AppRoot(onStartTrip: (Int) -> Unit, onPanic: () -> Unit) {
     } else {
         XochiHomeScreen(
             onStartTrip = { minutes -> onStartTrip(minutes) },
-            onOpenSettings = { showSettings = true }
+            onOpenSettings = { showSettings = true },
+            onOpenCover = { isCoverMode = true }
         )
     }
 }
@@ -141,8 +148,7 @@ fun AppRoot(onStartTrip: (Int) -> Unit, onPanic: () -> Unit) {
 // SplashScreen
 
 @Composable
-fun SplashScreen(onTimeout: suspend () -> Unit) {
-    LaunchedEffect(Unit) { onTimeout() }
+fun SplashScreen() {
     Column(
         modifier = Modifier.fillMaxSize().background(Color(0xFF0F172A)),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -166,7 +172,7 @@ fun SplashScreen(onTimeout: suspend () -> Unit) {
 // XochiHomeScreen
 
 @Composable
-fun XochiHomeScreen(onStartTrip: (Int) -> Unit, onOpenSettings: () -> Unit) {
+fun XochiHomeScreen(onStartTrip: (Int) -> Unit, onOpenSettings: () -> Unit, onOpenCover: () -> Unit) {
     var selectedMinutes by remember { mutableStateOf(10) }
     val times = listOf(5, 10, 15, 30)
     val customFont = FontFamily(androidx.compose.ui.text.font.Font(R.font.el_abogado_loco))
@@ -231,6 +237,11 @@ fun XochiHomeScreen(onStartTrip: (Int) -> Unit, onOpenSettings: () -> Unit) {
             ) {
                 Text("Start Walk", fontSize = 18.sp, color = Color.Black, maxLines = 1, softWrap = false)
             }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            TextButton(onClick = onOpenCover) {
+                Text("Enter Cover Mode", color = Color(0xFF94A3B8))
+            }
         }
     }
 }
@@ -239,7 +250,6 @@ fun XochiHomeScreen(onStartTrip: (Int) -> Unit, onOpenSettings: () -> Unit) {
 
 @Composable
 fun SettingsScreen(prefs: android.content.SharedPreferences, onClose: () -> Unit) {
-    var stealthMode by remember { mutableStateOf(prefs.getBoolean("stealth_mode", false)) }
     var tapWindowStr by remember { mutableStateOf(prefs.getInt("tap_window", 1500).toString()) }
     var contactEmail by remember { mutableStateOf(prefs.getString("contact_email", "emergency@example.com") ?: "") }
 
@@ -276,23 +286,6 @@ fun SettingsScreen(prefs: android.content.SharedPreferences, onClose: () -> Unit
         )
         
         Spacer(modifier = Modifier.height(24.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("Enable Stealth Mode (Timer)", color = Color.White)
-            Switch(
-                checked = stealthMode,
-                onCheckedChange = { 
-                    stealthMode = it
-                    prefs.edit().putBoolean("stealth_mode", it).apply()
-                }
-            )
-        }
-        
-        Spacer(modifier = Modifier.height(24.dp))
         Text("Max time between taps for panic (ms)", color = Color.White, modifier = Modifier.fillMaxWidth())
         Spacer(modifier = Modifier.height(8.dp))
         OutlinedTextField(
@@ -315,6 +308,7 @@ fun SettingsScreen(prefs: android.content.SharedPreferences, onClose: () -> Unit
 
 // TimerCoverScreen
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TimerCoverScreen(
     prefs: android.content.SharedPreferences,
@@ -348,7 +342,13 @@ fun TimerCoverScreen(
         verticalArrangement = Arrangement.SpaceBetween
     ) {
         Box(
-            modifier = Modifier.fillMaxWidth().height(60.dp).clickable { onExitCover() },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(60.dp)
+                .combinedClickable(
+                    onClick = {},
+                    onLongClick = { onExitCover() }
+                ),
             contentAlignment = Alignment.Center
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
