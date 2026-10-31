@@ -32,14 +32,13 @@ jobs:
         run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/xochi-release.keystore
 
       - name: Build Signed Release
-        env:
-          KEYSTORE_PATH: xochi-release.keystore
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: xochi
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           cd android
-          gradle assembleRelease
+          gradle assembleRelease \
+            -PKEYSTORE_PATH=xochi-release.keystore \
+            -PKEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }} \
+            -PKEY_ALIAS=xochi \
+            -PKEY_PASSWORD=${{ secrets.KEY_PASSWORD }}
 
       - name: Verify APK Exists
         run: |
