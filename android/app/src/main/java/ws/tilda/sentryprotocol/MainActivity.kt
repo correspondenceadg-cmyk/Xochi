@@ -58,9 +58,12 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startTrip(minutes: Int) {
+        val prefs = getSharedPreferences("xochi_prefs", Context.MODE_PRIVATE)
+        val email = prefs.getString("contact_email", "emergency@example.com") ?: "emergency@example.com"
+
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val json = """{"window_minutes":$minutes,"contacts":["emergency@example.com"],"message":"Android Walk"}"""
+                val json = """{"window_minutes":$minutes,"contacts":["$email"],"message":"Android Walk"}"""
                 val body = json.toRequestBody("application/json".toMediaType())
                 val req = Request.Builder().url("$API_BASE/v1/interval").post(body).build()
                 val res = client.newCall(req).execute()
@@ -238,6 +241,7 @@ fun XochiHomeScreen(onStartTrip: (Int) -> Unit, onOpenSettings: () -> Unit) {
 fun SettingsScreen(prefs: android.content.SharedPreferences, onClose: () -> Unit) {
     var stealthMode by remember { mutableStateOf(prefs.getBoolean("stealth_mode", false)) }
     var tapWindowStr by remember { mutableStateOf(prefs.getInt("tap_window", 1500).toString()) }
+    var contactEmail by remember { mutableStateOf(prefs.getString("contact_email", "emergency@example.com") ?: "") }
 
     Column(
         modifier = Modifier.fillMaxSize().background(Color(0xFF0F172A)).padding(32.dp),
@@ -252,6 +256,26 @@ fun SettingsScreen(prefs: android.content.SharedPreferences, onClose: () -> Unit
             TextButton(onClick = onClose) { Text("Done", color = Color(0xFF38BDF8)) }
         }
         Spacer(modifier = Modifier.height(32.dp))
+
+        Text("Emergency Contact Email", color = Color.White, modifier = Modifier.fillMaxWidth())
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedTextField(
+            value = contactEmail,
+            onValueChange = { 
+                contactEmail = it
+                prefs.edit().putString("contact_email", it).apply() 
+            },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = Color(0xFF38BDF8),
+                unfocusedBorderColor = Color(0xFF1E293B),
+                focusedTextColor = Color.White,
+                unfocusedTextColor = Color.White
+            )
+        )
+        
+        Spacer(modifier = Modifier.height(24.dp))
 
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -278,6 +302,7 @@ fun SettingsScreen(prefs: android.content.SharedPreferences, onClose: () -> Unit
                 it.toIntOrNull()?.let { ms -> prefs.edit().putInt("tap_window", ms).apply() }
             },
             modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = Color(0xFF38BDF8),
                 unfocusedBorderColor = Color(0xFF1E293B),
