@@ -25,7 +25,7 @@ jobs:
           gradle-version: 8.2
 
       - name: Decode Keystore
-        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/xochi-release.keystore
+        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/xochi-release.keystore
 
       - name: Build Signed Release
         env:
