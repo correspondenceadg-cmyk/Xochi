@@ -1,11 +1,11 @@
-import { renderCover } from "./cover";
 const API_BASE = 'https://xochi.deplexo.com';
 
-let state = { id: '', expiresAt: 0, timerInterval: 0 };
+let state = { id: '', expiresAt: 0, graceSecs: 0, timerInterval: 0, notified: false };
 
 const app = document.getElementById('app')!;
 
 const LOGO_SVG = `<img src="/logo.svg" class="logo" alt="Xochi Logo" />`;
+const LOADING_SVG = `<img src="/logo.svg" class="logo loading" alt="Loading" />`;
 
 // Pull to Refresh Setup
 
@@ -73,9 +73,9 @@ async function refreshState() {
       return;
     }
     
-    // Active or Grace: sync the timer
     state.id = savedId;
     state.expiresAt = data.expires_at;
+    state.graceSecs = parseInt(localStorage.getItem('grace_secs') || '0');
     localStorage.setItem('expires_at', state.expiresAt.toString());
     
     if (!document.getElementById('timer-display')) {
@@ -113,40 +113,60 @@ function renderBind() {
         <input id="window" type="number" value="10" min="1" placeholder="e.g. 10" />
       </div>
 
+      <div class="input-group">
+        <label>Grace Period (Seconds)</label>
+        <input id="grace" type="number" value="0" min="0" placeholder="e.g. 300" />
+      </div>
+
       <button id="start" class="btn btn-primary">Start Walk</button>
     </div>
   `;
 
   document.getElementById('start')!.onclick = async () => {
+    const btn = document.getElementById('start') as HTMLButtonElement;
     const email = (document.getElementById('email') as HTMLInputElement).value;
     const windowMins = parseInt((document.getElementById('window') as HTMLInputElement).value);
+    const grace = parseInt((document.getElementById('grace') as HTMLInputElement).value);
     
-    if (!email || !windowMins) return alert("Please fill in both fields");
+    if (!email || !windowMins) return alert("Please fill in required fields");
+
+    btn.disabled = true;
+    btn.innerHTML = LOADING_SVG;
 
     try {
       const res = await fetch(`${API_BASE}/v1/interval`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ window_minutes: windowMins, contacts: [email], message: "Walking" })
+        body: JSON.stringify({ window_minutes: windowMins, grace_secs: grace, contacts: [email], message: "Walking" })
       });
       const data = await res.json();
       if (data.id) {
         state.id = data.id;
         state.expiresAt = data.expires_at;
+        state.graceSecs = data.grace_secs;
         localStorage.setItem('trip_id', state.id);
         localStorage.setItem('expires_at', state.expiresAt.toString());
+        localStorage.setItem('grace_secs', state.graceSecs.toString());
         renderActive();
       }
-    } catch (e) { alert('Failed to connect to server'); }
+    } catch (e) { 
+      alert('Failed to connect to server'); 
+      btn.disabled = false;
+      btn.innerHTML = "Start Walk";
+    }
   };
 }
 
 function renderActive() {
+  if ("Notification" in window && Notification.permission === "default") {
+    Notification.requestPermission();
+  }
+
   app.innerHTML = `
     <div class="container">
-      <div class="status-badge">Timer Active</div>
-      <h1>Stay Safe</h1>
-      <p class="subtitle">Tap "I'm Safe" as soon as you arrive. If the timer hits zero, a 5-minute grace period starts.</p>
+      <div id="status-badge" class="status-badge">Timer Active</div>
+      <h1 id="header-text">Stay Safe</h1>
+      <p id="sub-text" class="subtitle">Tap "I'm Safe" as soon as you arrive.</p>
       
       <div id="timer-display" class="timer"></div>
       
@@ -172,15 +192,54 @@ function renderActive() {
   };
 
   const timerEl = document.getElementById('timer-display')!;
+  const badge = document.getElementById('status-badge')!;
+  const header = document.getElementById('header-text')!;
+  const subtext = document.getElementById('sub-text')!;
+
   const updateTimer = () => {
     const remaining = state.expiresAt - Math.floor(Date.now() / 1000);
-    const mins = Math.floor(Math.max(0, remaining) / 60);
-    const secs = Math.max(0, remaining) % 60;
-    timerEl.innerText = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-    
-    if (remaining <= 0) {
+    const inGrace = remaining <= 0;
+    const alerted = remaining <= -state.graceSecs;
+
+    if (alerted) {
+      document.body.classList.remove('alarm');
+      badge.className = 'status-badge danger';
+      badge.innerText = 'Alert Sent';
+      header.innerText = 'Contacts Notified';
+      subtext.innerText = 'Your emergency contacts have been sent your last location.';
+      timerEl.innerText = "00:00";
+      timerEl.classList.remove('warning');
+      (document.getElementById('extend') as HTMLButtonElement).style.display = 'none';
+      (document.getElementById('distress') as HTMLButtonElement).style.display = 'none';
+      (document.getElementById('safe') as HTMLButtonElement).innerText = 'Return Home';
+      (document.getElementById('safe') as HTMLButtonElement).onclick = () => {
+        localStorage.clear();
+        window.location.reload();
+      };
+    } else if (inGrace) {
+      document.body.classList.add('alarm');
+      badge.className = 'status-badge danger';
+      badge.innerText = 'Time Lapsed';
+      header.innerText = 'Grace Period';
+      subtext.innerText = 'Tap "I\'m Safe" immediately or a distress signal will be sent.';
+      
+      const graceRemaining = state.graceSecs + remaining;
+      const mins = Math.floor(Math.max(0, graceRemaining) / 60);
+      const secs = Math.max(0, graceRemaining) % 60;
+      timerEl.innerText = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
       timerEl.classList.add('warning');
-      timerEl.innerText = "GRACE";
+      (document.getElementById('extend') as HTMLButtonElement).style.display = 'none';
+
+      if (!state.notified && "Notification" in window && Notification.permission === "granted") {
+        state.notified = true;
+        new Notification("Xochi Alert", { body: "Time lapsed! Tap I'm Safe immediately." });
+      }
+    } else {
+      document.body.classList.remove('alarm');
+      const mins = Math.floor(Math.max(0, remaining) / 60);
+      const secs = Math.max(0, remaining) % 60;
+      timerEl.innerText = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+      timerEl.classList.remove('warning');
     }
   };
 
@@ -201,9 +260,9 @@ function renderActive() {
 
 async function closeTrip(action: 'safe' | 'distress') {
   clearInterval(state.timerInterval);
+  document.body.classList.remove('alarm');
   await fetch(`${API_BASE}/v1/interval/${state.id}/${action}`, { method: 'POST' });
-  localStorage.removeItem('trip_id');
-  localStorage.removeItem('expires_at');
+  localStorage.clear();
   
   app.innerHTML = `
     <div class="container">
@@ -214,26 +273,20 @@ async function closeTrip(action: 'safe' | 'distress') {
           ? 'Your trip was marked safe. No contacts were alerted.' 
           : 'Your distress signal was sent to your contacts immediately.'}
       </p>
-      <button class="btn btn-secondary" onclick="localStorage.clear(); location.reload()">Return to Home</button>
+      <button class="btn btn-secondary" onclick="location.reload()">Return to Home</button>
     </div>
   `;
 }
 
+// Init
+
 const savedId = localStorage.getItem('trip_id');
-if (savedId) {
-  refreshState();
+const savedExpires = localStorage.getItem('expires_at');
+if (savedId && savedExpires) {
+  state.id = savedId;
+  state.expiresAt = parseInt(savedExpires);
+  state.graceSecs = parseInt(localStorage.getItem('grace_secs') || '0');
+  renderActive();
 } else {
   renderBind();
-}
-
-// Routing
-if (window.location.pathname === '/cover' || window.location.hash === '#cover') {
-  renderCover();
-} else {
-  const savedId = localStorage.getItem('trip_id');
-  if (savedId) {
-    refreshState();
-  } else {
-    renderBind();
-  }
 }

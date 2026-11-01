@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 	"sync/atomic"
@@ -23,11 +24,12 @@ type Server struct {
 	TickSecret string
 	GraceSecs  int64
 	lastTick   atomic.Int64
+	rl         *rateLimiter
 }
 
 func New(st Store, n Notifier, tickSecret string) *Server {
 	return &Server{Store: st, Notifier: n, TickSecret: tickSecret, GraceSecs: 300,
-		Now: func() int64 { return time.Now().Unix() }}
+		Now: func() int64 { return time.Now().Unix() }, rl: newRateLimiter()}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -39,13 +41,14 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/interval/{id}/ping", s.ping)
 	mux.HandleFunc("GET /v1/interval/{id}/status", s.status)
 	mux.HandleFunc("POST /v1/tick", s.tick)
+	mux.HandleFunc("POST /v1/test-alert", s.testAlert)
 	mux.HandleFunc("GET /v1/contact/verify/{token}", s.verify)
 	mux.HandleFunc("POST /v1/contact/ack/{token}", s.ack)
 	mux.HandleFunc("GET /v1/contact/revoke/{token}", s.revoke)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, 200, map[string]any{"status": "ok", "last_tick_at": s.lastTick.Load()})
 	})
-	return cors(mux)
+	return cors(s.rl.limit(mux))
 }
 
 // newID() -> 32 hex chars; possession authorizes every call on that interval
@@ -80,6 +83,7 @@ func decode(w http.ResponseWriter, r *http.Request, v any) error {
 func (s *Server) open(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		WindowMinutes int      `json:"window_minutes"`
+		GraceSecs     int64    `json:"grace_secs"`
 		Contacts      []string `json:"contacts"`
 		Message       string   `json:"message"`
 	}
@@ -90,6 +94,9 @@ func (s *Server) open(w http.ResponseWriter, r *http.Request) {
 	if in.WindowMinutes < 1 || in.WindowMinutes > 720 {
 		fail(w, errors.New("window_minutes must be 1-720"))
 		return
+	}
+	if in.GraceSecs < 0 {
+		in.GraceSecs = 0
 	}
 	if len(in.Contacts) < 1 || len(in.Contacts) > 5 {
 		fail(w, errors.New("1-5 contacts required"))
@@ -103,7 +110,7 @@ func (s *Server) open(w http.ResponseWriter, r *http.Request) {
 	}
 	now := s.Now()
 	t := &Trip{
-		Interval: *guardian.New(newID(), now, int64(in.WindowMinutes)*60, s.GraceSecs),
+		Interval: *guardian.New(newID(), now, int64(in.WindowMinutes)*60, in.GraceSecs),
 		Contacts: in.Contacts, Message: in.Message,
 		NextContactPriority: 1,
 	}
@@ -125,7 +132,8 @@ func (s *Server) open(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	writeJSON(w, 201, map[string]any{"id": t.ID, "expires_at": t.ExpiresAt})
+	slog.Info("trip_opened", "trip", t.ID[:8])
+	writeJSON(w, 201, map[string]any{"id": t.ID, "expires_at": t.ExpiresAt, "grace_secs": in.GraceSecs})
 }
 
 func (s *Server) extend(w http.ResponseWriter, r *http.Request) {
@@ -148,11 +156,13 @@ func (s *Server) extend(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
+	slog.Info("trip_extended", "trip", r.PathValue("id")[:8])
 	writeJSON(w, 200, map[string]any{"state": guardian.Open, "expires_at": exp})
 }
 
 func (s *Server) safe(w http.ResponseWriter, r *http.Request) {
-	err := s.Store.Update(r.Context(), r.PathValue("id"), func(t *Trip) error {
+	id := r.PathValue("id")
+	err := s.Store.Update(r.Context(), id, func(t *Trip) error {
 		if err := t.Release(s.Now()); err != nil {
 			return err
 		}
@@ -163,10 +173,10 @@ func (s *Server) safe(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
+	slog.Info("trip_safe", "trip", id[:8])
 	writeJSON(w, 200, map[string]any{"state": guardian.Safe})
 }
 
-// distress response -> identical shape to safe/extend (no delivery info; cover-mode)
 func (s *Server) distress(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var alert *guardian.Alert
@@ -193,6 +203,7 @@ func (s *Server) distress(w http.ResponseWriter, r *http.Request) {
 		s.Store.SetAckToken(r.Context(), id, c, ackTokens[i])
 		s.deliver(r.Context(), id, c, ackTokens[i], *alert)
 	}
+	slog.Warn("trip_distress", "trip", id[:8])
 	writeJSON(w, 200, map[string]any{"state": guardian.Distress})
 }
 
@@ -289,11 +300,26 @@ func (s *Server) tick(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"processed": processed, "alerts": alerts, "at": s.Now()})
 }
 
+func (s *Server) testAlert(w http.ResponseWriter, r *http.Request) {
+	var in struct{ Email string }
+	if err := decode(w, r, &in); err != nil || !strings.Contains(in.Email, "@") {
+		fail(w, errors.New("valid email required"))
+		return
+	}
+	t := Trip{Interval: guardian.Interval{ID: "test1234"}}
+	if err := s.Notifier.SendAlert(t, in.Email, "test-token"); err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]string{"status": "sent"})
+}
+
 func (s *Server) deliver(ctx context.Context, id, contact, ackToken string, a guardian.Alert) error {
 	t, err := s.Store.Get(ctx, id)
 	if err != nil {
 		return err
 	}
+	slog.Info("alert_dispatching", "trip", id[:8], "kind", a.Kind)
 	return s.Notifier.SendAlert(t, contact, ackToken)
 }
 

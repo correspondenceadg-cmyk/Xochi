@@ -26,6 +26,16 @@ body {
   overflow: hidden; 
   background-color: var(--bg);
   padding: 1rem;
+  transition: background-color 0.3s;
+}
+
+body.alarm {
+  animation: pulse-bg 1s infinite alternate;
+}
+
+@keyframes pulse-bg {
+  from { background-color: var(--bg); }
+  to { background-color: #7f1d1d; }
 }
 
 .container {
@@ -43,10 +53,20 @@ body {
 }
 
 .logo {
-  width: 100px;
+  width: 120px;
   height: auto;
-  margin: 0 auto 1.5rem auto;
+  margin: 0 auto 1rem auto;
   display: block;
+}
+
+.logo.loading {
+  animation: spin 1s linear infinite;
+  width: 40px;
+  margin: 0 auto;
+}
+
+@keyframes spin {
+  100% { transform: rotate(360deg); }
 }
 
 h1 {
@@ -113,6 +133,11 @@ input:focus {
   transform: scale(0.98);
 }
 
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .btn-primary { background: var(--primary); color: #000; }
 .btn-safe { background: var(--success); }
 .btn-danger { background: var(--danger); }
@@ -151,32 +176,7 @@ input:focus {
   color: var(--success);
 }
 
-.ptr-indicator {
-  position: fixed;
-  top: -60px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 28px;
-  height: 28px;
-  border: 3px solid var(--text-muted);
-  border-top-color: var(--primary);
-  border-radius: 50%;
-  z-index: 9999;
-  opacity: 0;
-  transition: top 0.2s, opacity 0.2s;
-  pointer-events: none;
-}
-
-.ptr-indicator.pulling {
-  opacity: 1;
-}
-
-.ptr-indicator.refreshing {
-  top: 20px;
-  opacity: 1;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  100% { transform: translateX(-50%) rotate(360deg); }
+.status-badge.danger {
+  background: rgba(239, 68, 68, 0.2);
+  color: var(--danger);
 }

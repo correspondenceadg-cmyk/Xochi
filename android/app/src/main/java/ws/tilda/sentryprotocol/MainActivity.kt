@@ -1,6 +1,8 @@
 package ws.tilda.sentryprotocol
 
 import android.Manifest
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.os.Build
@@ -11,6 +13,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -18,20 +21,24 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -43,9 +50,12 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 
+// Vars
+
 class MainActivity : ComponentActivity() {
     private var tripId by mutableStateOf("")
     private var expiresAt by mutableStateOf(0L)
+    private var graceSecs by mutableStateOf(0)
     private val client = OkHttpClient()
     private val API_BASE = "https://xochi.deplexo.com"
 
@@ -60,16 +70,19 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        createNotificationChannel()
 
         val prefs = getSharedPreferences("xochi_prefs", Context.MODE_PRIVATE)
         val savedId = prefs.getString("active_trip_id", "") ?: ""
         val savedExp = prefs.getLong("active_trip_expires_at", 0L)
+        val savedGrace = prefs.getInt("active_trip_grace", 0)
         val now = System.currentTimeMillis() / 1000
-        if (savedId.isNotEmpty() && now < savedExp + 300) {
+        if (savedId.isNotEmpty() && now < savedExp + savedGrace + 60) {
             tripId = savedId
             expiresAt = savedExp
+            graceSecs = savedGrace
         } else if (savedId.isNotEmpty()) {
-            prefs.edit().remove("active_trip_id").remove("active_trip_expires_at").apply()
+            prefs.edit().remove("active_trip_id").remove("active_trip_expires_at").remove("active_trip_grace").apply()
         }
 
         permissionLauncher.launch(arrayOf(
@@ -82,6 +95,7 @@ class MainActivity : ComponentActivity() {
                 AppRoot(
                     tripId = tripId,
                     expiresAt = expiresAt,
+                    graceSecs = graceSecs,
                     onStartTrip = { minutes -> startTrip(minutes) },
                     onSafe = { closeTrip("safe") },
                     onExtend = { extendTrip(10) },
@@ -89,6 +103,16 @@ class MainActivity : ComponentActivity() {
                     onPanic = { triggerPanic() }
                 )
             }
+        }
+    }
+
+    // Logic
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel("xochi_alerts", "Xochi Alerts", NotificationManager.IMPORTANCE_HIGH)
+            val manager = getSystemService(NotificationManager::class.java)
+            manager.createNotificationChannel(channel)
         }
     }
 
@@ -106,10 +130,11 @@ class MainActivity : ComponentActivity() {
     private fun startTrip(minutes: Int) {
         val prefs = getSharedPreferences("xochi_prefs", Context.MODE_PRIVATE)
         val email = prefs.getString("contact_email", "emergency@example.com") ?: "emergency@example.com"
+        val grace = prefs.getInt("grace_period", 0)
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val json = """{"window_minutes":$minutes,"contacts":["$email"],"message":"Android Walk"}"""
+                val json = """{"window_minutes":$minutes,"grace_secs":$grace,"contacts":["$email"],"message":"Android Walk"}"""
                 val body = json.toRequestBody("application/json".toMediaType())
                 val req = Request.Builder().url("$API_BASE/v1/interval").post(body).build()
                 val res = client.newCall(req).execute()
@@ -117,7 +142,11 @@ class MainActivity : ComponentActivity() {
                 val newId = obj.getString("id")
                 val newExp = obj.getLong("expires_at")
 
-                prefs.edit().putString("active_trip_id", newId).putLong("active_trip_expires_at", newExp).apply()
+                prefs.edit()
+                    .putString("active_trip_id", newId)
+                    .putLong("active_trip_expires_at", newExp)
+                    .putInt("active_trip_grace", grace)
+                    .apply()
 
                 val intent = Intent(this@MainActivity, TrackingService::class.java)
                 intent.putExtra("TRIP_ID", newId)
@@ -126,6 +155,7 @@ class MainActivity : ComponentActivity() {
                 runOnUiThread {
                     tripId = newId
                     expiresAt = newExp
+                    graceSecs = grace
                     vibrate()
                 }
             } catch (e: Exception) { }
@@ -158,7 +188,7 @@ class MainActivity : ComponentActivity() {
                     .build()
                 client.newCall(req).execute()
             } catch (e: Exception) { }
-            prefs.edit().remove("active_trip_id").remove("active_trip_expires_at").apply()
+            prefs.edit().remove("active_trip_id").remove("active_trip_expires_at").remove("active_trip_grace").apply()
             runOnUiThread {
                 tripId = ""
                 expiresAt = 0L
@@ -179,7 +209,7 @@ class MainActivity : ComponentActivity() {
                     client.newCall(req).execute()
                 } catch (e: Exception) { }
             }
-            prefs.edit().remove("active_trip_id").remove("active_trip_expires_at").apply()
+            prefs.edit().remove("active_trip_id").remove("active_trip_expires_at").remove("active_trip_grace").apply()
             runOnUiThread {
                 tripId = ""
                 expiresAt = 0L
@@ -197,7 +227,7 @@ class MainActivity : ComponentActivity() {
                 val targetId = if (currentId.isNotEmpty()) {
                     currentId
                 } else {
-                    val json = """{"window_minutes":1,"contacts":["$email"],"message":"Panic trigger"}"""
+                    val json = """{"window_minutes":1,"grace_secs":0,"contacts":["$email"],"message":"Panic trigger"}"""
                     val body = json.toRequestBody("application/json".toMediaType())
                     val req = Request.Builder().url("$API_BASE/v1/interval").post(body).build()
                     val res = client.newCall(req).execute()
@@ -209,7 +239,7 @@ class MainActivity : ComponentActivity() {
                     .build()
                 client.newCall(distressReq).execute()
             } catch (e: Exception) { }
-            prefs.edit().remove("active_trip_id").remove("active_trip_expires_at").apply()
+            prefs.edit().remove("active_trip_id").remove("active_trip_expires_at").remove("active_trip_grace").apply()
             runOnUiThread {
                 finishAffinity()
                 System.exit(0)
@@ -235,6 +265,7 @@ fun getCustomFont(): FontFamily {
 fun AppRoot(
     tripId: String,
     expiresAt: Long,
+    graceSecs: Int,
     onStartTrip: (Int) -> Unit,
     onSafe: () -> Unit,
     onExtend: () -> Unit,
@@ -255,7 +286,7 @@ fun AppRoot(
         showSplash -> SplashScreen()
         showSettings -> SettingsScreen(prefs, onClose = { showSettings = false })
         isCoverMode -> TimerCoverScreen(prefs, onTripleTap = { onPanic() }, onExitCover = { isCoverMode = false })
-        tripId.isNotEmpty() -> ActiveTripScreen(expiresAt, onSafe, onExtend, onDistress)
+        tripId.isNotEmpty() -> ActiveTripScreen(expiresAt, graceSecs, onSafe, onExtend, onDistress)
         else -> HomeScreen(
             onStartTrip = onStartTrip,
             onOpenSettings = { showSettings = true },
@@ -286,7 +317,17 @@ fun SplashScreen() {
 fun HomeScreen(onStartTrip: (Int) -> Unit, onOpenSettings: () -> Unit, onOpenCover: () -> Unit) {
     val customFont = getCustomFont()
     var selectedMinutes by remember { mutableStateOf(10) }
+    var customMinutes by remember { mutableStateOf("") }
+    var isStarting by remember { mutableStateOf(false) }
     val times = listOf(5, 10, 15, 30)
+    
+    val infiniteTransition = rememberInfiniteTransition(label = "spinner")
+    val angle by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(tween(1000, easing = LinearEasing), RepeatMode.Restart),
+        label = "angle"
+    )
 
     Box(modifier = Modifier.fillMaxSize().background(Color(0xFF0F172A))) {
         IconButton(onClick = onOpenSettings, modifier = Modifier.align(Alignment.TopEnd).padding(16.dp)) {
@@ -309,13 +350,13 @@ fun HomeScreen(onStartTrip: (Int) -> Unit, onOpenSettings: () -> Unit, onOpenCov
                 textAlign = TextAlign.Center,
                 fontFamily = customFont
             )
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 times.forEach { time ->
-                    val isSelected = selectedMinutes == time
+                    val isSelected = selectedMinutes == time && customMinutes.isEmpty()
                     Button(
-                        onClick = { selectedMinutes = time },
+                        onClick = { selectedMinutes = time; customMinutes = "" },
                         colors = ButtonDefaults.buttonColors(
                             containerColor = if (isSelected) Color(0xFF38BDF8) else Color(0xFF1E293B),
                             contentColor = if (isSelected) Color.Black else Color.White
@@ -328,14 +369,47 @@ fun HomeScreen(onStartTrip: (Int) -> Unit, onOpenSettings: () -> Unit, onOpenCov
                 }
             }
 
+            Spacer(modifier = Modifier.height(12.dp))
+            OutlinedTextField(
+                value = customMinutes,
+                onValueChange = { if (it.all { char -> char.isDigit() }) customMinutes = it },
+                placeholder = { Text("Custom (minutes)", color = Color.Gray) },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Color(0xFF38BDF8),
+                    unfocusedBorderColor = Color(0xFF1E293B),
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White
+                )
+            )
+
             Spacer(modifier = Modifier.height(32.dp))
+            
+            val finalMinutes = if (customMinutes.isNotEmpty()) customMinutes.toIntOrNull() ?: 10 else selectedMinutes
             Button(
-                onClick = { onStartTrip(selectedMinutes) },
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF38BDF8)),
+                onClick = { 
+                    isStarting = true
+                    onStartTrip(finalMinutes) 
+                },
+                enabled = !isStarting,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF38BDF8),
+                    disabledContainerColor = Color(0xFF38BDF8).copy(alpha = 0.5f)
+                ),
                 modifier = Modifier.fillMaxWidth().height(56.dp),
                 shape = RoundedCornerShape(8.dp)
             ) {
-                Text("Start Walk", fontSize = 18.sp, color = Color.Black, maxLines = 1, softWrap = false)
+                if (isStarting) {
+                    Image(
+                        painter = painterResource(id = R.drawable.logo),
+                        contentDescription = "Loading",
+                        modifier = Modifier.size(32.dp).rotate(angle)
+                    )
+                } else {
+                    Text("Start Walk", fontSize = 18.sp, color = Color.Black, maxLines = 1, softWrap = false)
+                }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -349,8 +423,11 @@ fun HomeScreen(onStartTrip: (Int) -> Unit, onOpenSettings: () -> Unit, onOpenCov
 // ActiveTripScreen
 
 @Composable
-fun ActiveTripScreen(expiresAt: Long, onSafe: () -> Unit, onExtend: () -> Unit, onDistress: () -> Unit) {
+fun ActiveTripScreen(expiresAt: Long, graceSecs: Int, onSafe: () -> Unit, onExtend: () -> Unit, onDistress: () -> Unit) {
+    val context = LocalContext.current
     var now by remember { mutableStateOf(System.currentTimeMillis() / 1000) }
+    var notifiedGrace by remember { mutableStateOf(false) }
+
     LaunchedEffect(Unit) {
         while (true) {
             now = System.currentTimeMillis() / 1000
@@ -359,14 +436,40 @@ fun ActiveTripScreen(expiresAt: Long, onSafe: () -> Unit, onExtend: () -> Unit, 
     }
 
     val remaining = expiresAt - now
-    val inGrace = remaining in -300L until 0L
-    val alerted = remaining <= -300L
+    val inGrace = remaining <= 0L
+    val alerted = remaining <= -graceSecs.toLong()
+
+    LaunchedEffect(inGrace) {
+        if (inGrace && !alerted && !notifiedGrace) {
+            notifiedGrace = true
+            val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val notification = NotificationCompat.Builder(context, "xochi_alerts")
+                .setSmallIcon(android.R.drawable.ic_dialog_alert)
+                .setContentTitle("Time Lapsed")
+                .setContentText("Your walk timer has ended. Tap \"I'm Safe\" or a distress signal will be sent.")
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setAutoCancel(true)
+                .build()
+            manager.notify(1, notification)
+        }
+    }
+
+    val infiniteTransition = rememberInfiniteTransition(label = "alarm")
+    val alarmColor by infiniteTransition.animateColor(
+        initialValue = Color(0xFF0F172A),
+        targetValue = Color(0xFF7F1D1D),
+        animationSpec = infiniteRepeatable(
+            animation = tween(500, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "alarm_color"
+    )
 
     val displayMins = (Math.max(0L, remaining) / 60).toInt()
     val displaySecs = (Math.max(0L, remaining) % 60).toInt()
 
     Column(
-        modifier = Modifier.fillMaxSize().background(Color(0xFF0F172A)).padding(32.dp),
+        modifier = Modifier.fillMaxSize().background(if (inGrace && !alerted) alarmColor else Color(0xFF0F172A)).padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
@@ -380,14 +483,27 @@ fun ActiveTripScreen(expiresAt: Long, onSafe: () -> Unit, onExtend: () -> Unit, 
                     Text("Return Home", color = Color.White, fontSize = 18.sp)
                 }
             }
+            inGrace -> {
+                Text("TIME LAPSED", color = Color(0xFFEF4444), fontSize = 32.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(16.dp))
+                Text("Tap \"I'm Safe\" or a distress signal will be sent.", color = Color.White, textAlign = TextAlign.Center)
+                Spacer(modifier = Modifier.height(32.dp))
+                Button(onClick = onSafe, modifier = Modifier.fillMaxWidth().height(64.dp), shape = RoundedCornerShape(8.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))) {
+                    Text("I'm Safe", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+                Button(onClick = onDistress, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(8.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5C0A0A))) {
+                    Text("DISTRESS", color = Color(0xFFEF4444), fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                }
+            }
             else -> {
                 Surface(
-                    color = if (inGrace) Color(0x33EF4444) else Color(0x3338BDF8),
+                    color = Color(0x3338BDF8),
                     shape = RoundedCornerShape(50)
                 ) {
                     Text(
-                        if (inGrace) "GRACE PERIOD" else "TIMER ACTIVE",
-                        color = if (inGrace) Color(0xFFEF4444) else Color(0xFF38BDF8),
+                        "TIMER ACTIVE",
+                        color = Color(0xFF38BDF8),
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                         fontSize = 12.sp
@@ -396,7 +512,7 @@ fun ActiveTripScreen(expiresAt: Long, onSafe: () -> Unit, onExtend: () -> Unit, 
                 Spacer(modifier = Modifier.height(24.dp))
                 Text(
                     "${displayMins.toString().padStart(2, '0')}:${displaySecs.toString().padStart(2, '0')}",
-                    color = if (inGrace) Color(0xFFEF4444) else Color.White,
+                    color = Color.White,
                     fontSize = 80.sp,
                     fontWeight = FontWeight.Light,
                     fontFamily = FontFamily.Monospace
@@ -425,6 +541,7 @@ fun SettingsScreen(prefs: android.content.SharedPreferences, onClose: () -> Unit
     val context = LocalContext.current
     var tapWindowStr by remember { mutableStateOf(prefs.getInt("tap_window", 1500).toString()) }
     var contactEmail by remember { mutableStateOf(prefs.getString("contact_email", "emergency@example.com") ?: "") }
+    var gracePeriodStr by remember { mutableStateOf(prefs.getInt("grace_period", 0).toString()) }
 
     Column(
         modifier = Modifier.fillMaxSize().background(Color(0xFF0F172A)).padding(32.dp),
@@ -434,7 +551,7 @@ fun SettingsScreen(prefs: android.content.SharedPreferences, onClose: () -> Unit
             Text("Settings", color = Color.White, fontSize = 24.sp)
             TextButton(onClick = onClose) { Text("Done", color = Color(0xFF38BDF8)) }
         }
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
         Text("Emergency Contact Email", color = Color.White, modifier = Modifier.fillMaxWidth())
         Spacer(modifier = Modifier.height(8.dp))
@@ -469,6 +586,21 @@ fun SettingsScreen(prefs: android.content.SharedPreferences, onClose: () -> Unit
         ) { Text("Send Test Alert", color = Color(0xFF38BDF8)) }
 
         Spacer(modifier = Modifier.height(24.dp))
+        Text("Grace Period (seconds)", color = Color.White, modifier = Modifier.fillMaxWidth())
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedTextField(
+            value = gracePeriodStr,
+            onValueChange = { 
+                gracePeriodStr = it
+                it.toIntOrNull()?.let { secs -> prefs.edit().putInt("grace_period", secs).apply() } 
+            },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color(0xFF38BDF8), unfocusedBorderColor = Color(0xFF1E293B), focusedTextColor = Color.White, unfocusedTextColor = Color.White)
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
         Text("Max time between taps for panic (ms)", color = Color.White, modifier = Modifier.fillMaxWidth())
         Spacer(modifier = Modifier.height(8.dp))
         OutlinedTextField(
@@ -476,6 +608,7 @@ fun SettingsScreen(prefs: android.content.SharedPreferences, onClose: () -> Unit
             onValueChange = { tapWindowStr = it; it.toIntOrNull()?.let { ms -> prefs.edit().putInt("tap_window", ms).apply() } },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color(0xFF38BDF8), unfocusedBorderColor = Color(0xFF1E293B), focusedTextColor = Color.White, unfocusedTextColor = Color.White)
         )
     }
