@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Vibrator
@@ -613,8 +614,20 @@ fun SettingsScreen(prefs: android.content.SharedPreferences, onClose: () -> Unit
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color(0xFF38BDF8), unfocusedBorderColor = Color(0xFF1E293B), focusedTextColor = Color.White, unfocusedTextColor = Color.White)
         )
+        Spacer(modifier = Modifier.height(16.dp))
+        Button(
+            onClick = {
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/correspondenceadg-cmyk/Xochi/releases/latest"))
+                context.startActivity(intent)
+            },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF38BDF8))
+        ) {
+            Text("Check for Updates", color = Color.Black)
+        }
     }
 }
+
 
 // TimerCoverScreen
 
@@ -650,7 +663,11 @@ fun TimerCoverScreen(prefs: android.content.SharedPreferences, onTripleTap: () -
             contentAlignment = Alignment.Center
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                TextButton(onClick = { isTimerMode = false; isRunning = false }) {
+                TextButton(onClick = { 
+                    isTimerMode = false
+                    isRunning = false
+                    timeMs = 0L 
+                }) {
                     Text("Stopwatch", color = if (!isTimerMode) Color.White else Color.Gray)
                 }
                 TextButton(onClick = { isTimerMode = true; isRunning = false; timeMs = targetTimeMs }) {
