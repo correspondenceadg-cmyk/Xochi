@@ -3,10 +3,10 @@ package ws.tilda.sentryprotocol
 import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.app.PendingIntent
 import android.os.Build
 import android.os.Bundle
 import android.os.Vibrator
@@ -38,6 +38,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -249,36 +250,6 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-
-    if (showPinDialog) {
-        val savedPin = prefs.getString("cover_mode_pin", "1234") ?: "1234"
-        AlertDialog(
-            onDismissRequest = { showPinDialog = false; pinInput = "" },
-            title = { Text("Enter PIN") },
-            text = {
-                OutlinedTextField(
-                    value = pinInput,
-                    onValueChange = { pinInput = it },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                    singleLine = true
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    if (pinInput == savedPin) {
-                        showPinDialog = false
-                        pinInput = ""
-                        onExitCover()
-                    } else {
-                        pinInput = ""
-                    }
-                }) { Text("Unlock") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showPinDialog = false; pinInput = "" }) { Text("Cancel") }
-            }
-        )
-    }
 }
 
 // Helpers
@@ -319,7 +290,7 @@ fun AppRoot(
         showSplash -> SplashScreen()
         showSettings -> SettingsScreen(prefs, onClose = { showSettings = false })
         isCoverMode -> TimerCoverScreen(prefs, onTripleTap = { onPanic() }, onExitCover = { isCoverMode = false })
-        tripId.isNotEmpty() -> ActiveTripScreen(expiresAt, graceSecs, onSafe, onExtend, onDistress)
+        tripId.isNotEmpty() -> ActiveTripScreen(tripId, expiresAt, graceSecs, onSafe, onExtend, onDistress)
         else -> HomeScreen(
             onStartTrip = onStartTrip,
             onOpenSettings = { showSettings = true },
@@ -344,7 +315,7 @@ fun SplashScreen() {
     }
 }
 
-// HomeScreen (Compact, no scrolling)
+// HomeScreen
 
 @Composable
 fun HomeScreen(onStartTrip: (Int) -> Unit, onOpenSettings: () -> Unit, onOpenCover: () -> Unit) {
@@ -457,7 +428,7 @@ fun HomeScreen(onStartTrip: (Int) -> Unit, onOpenSettings: () -> Unit, onOpenCov
 // ActiveTripScreen
 
 @Composable
-fun ActiveTripScreen(expiresAt: Long, graceSecs: Int, onSafe: () -> Unit, onExtend: () -> Unit, onDistress: () -> Unit) {
+fun ActiveTripScreen(tripId: String, expiresAt: Long, graceSecs: Int, onSafe: () -> Unit, onExtend: () -> Unit, onDistress: () -> Unit) {
     val context = LocalContext.current
     var now by remember { mutableStateOf(System.currentTimeMillis() / 1000) }
     var notifiedGrace by remember { mutableStateOf(false) }
@@ -476,15 +447,26 @@ fun ActiveTripScreen(expiresAt: Long, graceSecs: Int, onSafe: () -> Unit, onExte
     LaunchedEffect(inGrace) {
         if (inGrace && !alerted && !notifiedGrace) {
             notifiedGrace = true
-            val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            val notification = NotificationCompat.Builder(context, "xochi_alerts")
+            val prefs = context.getSharedPreferences("xochi_prefs", Context.MODE_PRIVATE)
+            val enableAction = prefs.getBoolean("enable_notification_action", true)
+
+            val builder = NotificationCompat.Builder(context, "xochi_alerts")
                 .setSmallIcon(android.R.drawable.ic_dialog_alert)
                 .setContentTitle("Time Lapsed")
-                .setContentText("Your walk timer has ended. Tap \"I'm Safe\" or a distress signal will be sent.")
+                .setContentText("Your walking timer has ended. Tap \"I'm Safe\" or a distress signal will be sent.")
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setAutoCancel(true)
-                .build()
-            manager.notify(1, notification)
+
+            if (enableAction) {
+                val safeIntent = Intent(context, SafeReceiver::class.java).apply {
+                    putExtra("TRIP_ID", tripId)
+                }
+                val safePendingIntent = PendingIntent.getBroadcast(context, 0, safeIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+                builder.addAction(android.R.drawable.ic_menu_save, "I'm Safe", safePendingIntent)
+            }
+
+            val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            manager.notify(1, builder.build())
         }
     }
 
@@ -568,7 +550,7 @@ fun ActiveTripScreen(expiresAt: Long, graceSecs: Int, onSafe: () -> Unit, onExte
     }
 }
 
-// SettingsScreen (Compact, no scrolling)
+// SettingsScreen
 
 @Composable
 fun SettingsScreen(prefs: android.content.SharedPreferences, onClose: () -> Unit) {
@@ -576,6 +558,7 @@ fun SettingsScreen(prefs: android.content.SharedPreferences, onClose: () -> Unit
     var tapWindowStr by remember { mutableStateOf(prefs.getInt("tap_window", 1500).toString()) }
     var contactEmail by remember { mutableStateOf(prefs.getString("contact_email", "emergency@example.com") ?: "") }
     var gracePeriodStr by remember { mutableStateOf(prefs.getInt("grace_period", 0).toString()) }
+    var coverPin by remember { mutableStateOf(prefs.getString("cover_mode_pin", "1234") ?: "1234") }
 
     Column(
         modifier = Modifier.fillMaxSize().background(Color(0xFF0F172A)).padding(24.dp),
@@ -632,11 +615,12 @@ fun SettingsScreen(prefs: android.content.SharedPreferences, onClose: () -> Unit
         Text("Cover Mode PIN", color = Color.White, modifier = Modifier.fillMaxWidth(), fontSize = 14.sp)
         Spacer(modifier = Modifier.height(4.dp))
         OutlinedTextField(
-            value = prefs.getString("cover_mode_pin", "1234") ?: "1234",
-            onValueChange = { prefs.edit().putString("cover_mode_pin", it).apply() },
+            value = coverPin,
+            onValueChange = { coverPin = it; prefs.edit().putString("cover_mode_pin", it).apply() },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+            visualTransformation = PasswordVisualTransformation(),
             colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color(0xFF38BDF8), unfocusedBorderColor = Color(0xFF1E293B), focusedTextColor = Color.White, unfocusedTextColor = Color.White)
         )
 
@@ -666,6 +650,7 @@ fun SettingsScreen(prefs: android.content.SharedPreferences, onClose: () -> Unit
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color(0xFF38BDF8), unfocusedBorderColor = Color(0xFF1E293B), focusedTextColor = Color.White, unfocusedTextColor = Color.White)
         )
+
         Spacer(modifier = Modifier.height(16.dp))
         Button(
             onClick = {
@@ -679,7 +664,6 @@ fun SettingsScreen(prefs: android.content.SharedPreferences, onClose: () -> Unit
         }
     }
 }
-
 
 // TimerCoverScreen
 
@@ -785,5 +769,35 @@ fun TimerCoverScreen(prefs: android.content.SharedPreferences, onTripleTap: () -
                 Text(if (isRunning) "Stop" else "Start", color = if (isRunning) Color(0xFFFF3B30) else Color(0xFF4CD964), maxLines = 1, softWrap = false)
             }
         }
+    }
+
+    if (showPinDialog) {
+        val savedPin = prefs.getString("cover_mode_pin", "1234") ?: "1234"
+        AlertDialog(
+            onDismissRequest = { showPinDialog = false; pinInput = "" },
+            title = { Text("Enter PIN") },
+            text = {
+                OutlinedTextField(
+                    value = pinInput,
+                    onValueChange = { pinInput = it },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                    singleLine = true
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (pinInput == savedPin) {
+                        showPinDialog = false
+                        pinInput = ""
+                        onExitCover()
+                    } else {
+                        pinInput = ""
+                    }
+                }) { Text("Unlock") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPinDialog = false; pinInput = "" }) { Text("Cancel") }
+            }
+        )
     }
 }
