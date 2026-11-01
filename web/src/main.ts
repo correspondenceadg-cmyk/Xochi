@@ -1,4 +1,4 @@
-const API_BASE = 'https://xochi.deplexo.com';
+const API_BASE = 'https://xochiquetzal.de.deplexo.com';
 
 let state = { id: '', expiresAt: 0, graceSecs: 0, timerInterval: 0, notified: false };
 

@@ -66,7 +66,7 @@ class MainActivity : ComponentActivity() {
     private var graceSecs by mutableStateOf(0)
     private var isStarting by mutableStateOf(false) // Global loading state
     private val client = OkHttpClient()
-    private val API_BASE = "https://xochi.deplexo.com"
+    private val API_BASE = "https://xochiquetzal.de.deplexo.com"
 
     private val permissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
         val fine = grants[Manifest.permission.ACCESS_FINE_LOCATION] == true
@@ -602,7 +602,7 @@ fun SettingsScreen(prefs: android.content.SharedPreferences, onClose: () -> Unit
                     try {
                         val json = """{"email":"$contactEmail"}"""
                         val body = json.toRequestBody("application/json".toMediaType())
-                        val req = Request.Builder().url("https://xochi.deplexo.com/v1/test-alert").post(body).build()
+                        val req = Request.Builder().url("https://xochiquetzal.de.deplexo.com/v1/test-alert").post(body).build()
                         OkHttpClient().newCall(req).execute()
                         CoroutineScope(Dispatchers.Main).launch {
                             Toast.makeText(context, "Test alert sent", Toast.LENGTH_LONG).show()

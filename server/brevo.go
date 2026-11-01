@@ -47,11 +47,11 @@ func (b BrevoNotifier) send(to, subject, text string) error {
 }
 
 func (b BrevoNotifier) SendConsent(to, from, token string) error {
-	text := fmt.Sprintf("%s named you as a safety contact. Accept here: https://xochi.app/v1/contact/verify/%s", from, token)
+	text := fmt.Sprintf("%s named you as a safety contact. Accept here: https://xochiquetzal.de.deplexo.com/v1/contact/verify/%s", from, token)
 	return b.send(to, "Safety Contact Request", text)
 }
 
 func (b BrevoNotifier) SendAlert(t Trip, to, ackToken string) error {
-	text := fmt.Sprintf("No check-in from trip %s.\nAck here: https://xochi.app/v1/contact/ack/%s", t.ID, ackToken)
+	text := fmt.Sprintf("No check-in from trip %s.\nAck here: https://xochiquetzal.de.deplexo.com/v1/contact/ack/%s", t.ID, ackToken)
 	return b.send(to, "[Guardian] Missed check-in", text)
 }
