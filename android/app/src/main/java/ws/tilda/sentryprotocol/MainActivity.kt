@@ -305,13 +305,13 @@ fun SplashScreen() {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Image(painter = painterResource(id = R.drawable.logo), contentDescription = "Logo", modifier = Modifier.size(250.dp))
-        Spacer(modifier = Modifier.height(24.dp))
-        Text("Xochi", color = Color.White, fontSize = 56.sp, fontFamily = customFont)
+        Image(painter = painterResource(id = R.drawable.logo), contentDescription = "Logo", modifier = Modifier.size(180.dp))
+        Spacer(modifier = Modifier.height(16.dp))
+        Text("Xochi", color = Color.White, fontSize = 48.sp, fontFamily = customFont)
     }
 }
 
-// HomeScreen
+// HomeScreen (Compact, no scrolling)
 
 @Composable
 fun HomeScreen(onStartTrip: (Int) -> Unit, onOpenSettings: () -> Unit, onOpenCover: () -> Unit) {
@@ -330,27 +330,27 @@ fun HomeScreen(onStartTrip: (Int) -> Unit, onOpenSettings: () -> Unit, onOpenCov
     )
 
     Box(modifier = Modifier.fillMaxSize().background(Color(0xFF0F172A))) {
-        IconButton(onClick = onOpenSettings, modifier = Modifier.align(Alignment.TopEnd).padding(16.dp)) {
+        IconButton(onClick = onOpenSettings, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)) {
             Icon(Icons.Default.Settings, contentDescription = "Settings", tint = Color(0xFF94A3B8))
         }
 
         Column(
-            modifier = Modifier.fillMaxSize().padding(32.dp),
+            modifier = Modifier.fillMaxSize().padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Image(painter = painterResource(id = R.drawable.logo), contentDescription = "Logo", modifier = Modifier.size(200.dp))
-            Spacer(modifier = Modifier.height(24.dp))
-            Text("Xochi", color = Color.White, fontSize = 48.sp, fontFamily = customFont)
-            Spacer(modifier = Modifier.height(16.dp))
+            Image(painter = painterResource(id = R.drawable.logo), contentDescription = "Logo", modifier = Modifier.size(140.dp))
+            Spacer(modifier = Modifier.height(12.dp))
+            Text("Xochi", color = Color.White, fontSize = 36.sp, fontFamily = customFont)
+            Spacer(modifier = Modifier.height(8.dp))
             Text(
-                "A trip-scoped safety check-in. Set a timer for your walk. If you don't tap \"Safe\" before time runs out, we'll alert your emergency contact.",
+                "A trip-scoped safety check-in. Set a timer for your walk.",
                 color = Color(0xFF94A3B8),
-                fontSize = 16.sp,
+                fontSize = 14.sp,
                 textAlign = TextAlign.Center,
                 fontFamily = customFont
             )
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 times.forEach { time ->
@@ -362,18 +362,19 @@ fun HomeScreen(onStartTrip: (Int) -> Unit, onOpenSettings: () -> Unit, onOpenCov
                             contentColor = if (isSelected) Color.Black else Color.White
                         ),
                         modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(0.dp)
+                        contentPadding = PaddingValues(0.dp),
+                        shape = RoundedCornerShape(8.dp)
                     ) {
-                        Text("${time}m", maxLines = 1)
+                        Text("${time}m", maxLines = 1, fontSize = 14.sp)
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             OutlinedTextField(
                 value = customMinutes,
                 onValueChange = { if (it.all { char -> char.isDigit() }) customMinutes = it },
-                placeholder = { Text("Custom (minutes)", color = Color.Gray) },
+                placeholder = { Text("Custom (minutes)", color = Color.Gray, fontSize = 14.sp) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -385,7 +386,7 @@ fun HomeScreen(onStartTrip: (Int) -> Unit, onOpenSettings: () -> Unit, onOpenCov
                 )
             )
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(24.dp))
             
             val finalMinutes = if (customMinutes.isNotEmpty()) customMinutes.toIntOrNull() ?: 10 else selectedMinutes
             Button(
@@ -414,7 +415,7 @@ fun HomeScreen(onStartTrip: (Int) -> Unit, onOpenSettings: () -> Unit, onOpenCov
 
             Spacer(modifier = Modifier.height(16.dp))
             TextButton(onClick = onOpenCover) {
-                Text("Enter Cover Mode", color = Color(0xFF94A3B8))
+                Text("Enter Cover Mode", color = Color(0xFF94A3B8), fontSize = 14.sp)
             }
         }
     }
@@ -469,7 +470,7 @@ fun ActiveTripScreen(expiresAt: Long, graceSecs: Int, onSafe: () -> Unit, onExte
     val displaySecs = (Math.max(0L, remaining) % 60).toInt()
 
     Column(
-        modifier = Modifier.fillMaxSize().background(if (inGrace && !alerted) alarmColor else Color(0xFF0F172A)).padding(32.dp),
+        modifier = Modifier.fillMaxSize().background(if (inGrace && !alerted) alarmColor else Color(0xFF0F172A)).padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
@@ -513,7 +514,7 @@ fun ActiveTripScreen(expiresAt: Long, graceSecs: Int, onSafe: () -> Unit, onExte
                 Text(
                     "${displayMins.toString().padStart(2, '0')}:${displaySecs.toString().padStart(2, '0')}",
                     color = Color.White,
-                    fontSize = 80.sp,
+                    fontSize = 72.sp,
                     fontWeight = FontWeight.Light,
                     fontFamily = FontFamily.Monospace
                 )
@@ -534,7 +535,7 @@ fun ActiveTripScreen(expiresAt: Long, graceSecs: Int, onSafe: () -> Unit, onExte
     }
 }
 
-// SettingsScreen
+// SettingsScreen (Compact, no scrolling)
 
 @Composable
 fun SettingsScreen(prefs: android.content.SharedPreferences, onClose: () -> Unit) {
@@ -544,17 +545,17 @@ fun SettingsScreen(prefs: android.content.SharedPreferences, onClose: () -> Unit
     var gracePeriodStr by remember { mutableStateOf(prefs.getInt("grace_period", 0).toString()) }
 
     Column(
-        modifier = Modifier.fillMaxSize().background(Color(0xFF0F172A)).padding(32.dp),
+        modifier = Modifier.fillMaxSize().background(Color(0xFF0F172A)).padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text("Settings", color = Color.White, fontSize = 24.sp)
             TextButton(onClick = onClose) { Text("Done", color = Color(0xFF38BDF8)) }
         }
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
-        Text("Emergency Contact Email", color = Color.White, modifier = Modifier.fillMaxWidth())
-        Spacer(modifier = Modifier.height(8.dp))
+        Text("Emergency Contact Email", color = Color.White, modifier = Modifier.fillMaxWidth(), fontSize = 14.sp)
+        Spacer(modifier = Modifier.height(4.dp))
         OutlinedTextField(
             value = contactEmail,
             onValueChange = { contactEmail = it; prefs.edit().putString("contact_email", it).apply() },
@@ -563,7 +564,7 @@ fun SettingsScreen(prefs: android.content.SharedPreferences, onClose: () -> Unit
             colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color(0xFF38BDF8), unfocusedBorderColor = Color(0xFF1E293B), focusedTextColor = Color.White, unfocusedTextColor = Color.White)
         )
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(8.dp))
         OutlinedButton(
             onClick = {
                 CoroutineScope(Dispatchers.IO).launch {
@@ -573,7 +574,7 @@ fun SettingsScreen(prefs: android.content.SharedPreferences, onClose: () -> Unit
                         val req = Request.Builder().url("https://xochi.deplexo.com/v1/test-alert").post(body).build()
                         OkHttpClient().newCall(req).execute()
                         CoroutineScope(Dispatchers.Main).launch {
-                            Toast.makeText(context, "Test alert sent to $contactEmail", Toast.LENGTH_LONG).show()
+                            Toast.makeText(context, "Test alert sent", Toast.LENGTH_LONG).show()
                         }
                     } catch (e: Exception) {
                         CoroutineScope(Dispatchers.Main).launch {
@@ -583,11 +584,11 @@ fun SettingsScreen(prefs: android.content.SharedPreferences, onClose: () -> Unit
                 }
             },
             modifier = Modifier.fillMaxWidth()
-        ) { Text("Send Test Alert", color = Color(0xFF38BDF8)) }
+        ) { Text("Send Test Alert", color = Color(0xFF38BDF8), fontSize = 14.sp) }
 
-        Spacer(modifier = Modifier.height(24.dp))
-        Text("Grace Period (seconds)", color = Color.White, modifier = Modifier.fillMaxWidth())
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(16.dp))
+        Text("Grace Period (seconds)", color = Color.White, modifier = Modifier.fillMaxWidth(), fontSize = 14.sp)
+        Spacer(modifier = Modifier.height(4.dp))
         OutlinedTextField(
             value = gracePeriodStr,
             onValueChange = { 
@@ -600,9 +601,9 @@ fun SettingsScreen(prefs: android.content.SharedPreferences, onClose: () -> Unit
             colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color(0xFF38BDF8), unfocusedBorderColor = Color(0xFF1E293B), focusedTextColor = Color.White, unfocusedTextColor = Color.White)
         )
 
-        Spacer(modifier = Modifier.height(24.dp))
-        Text("Max time between taps for panic (ms)", color = Color.White, modifier = Modifier.fillMaxWidth())
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(16.dp))
+        Text("Panic Tap Window (ms)", color = Color.White, modifier = Modifier.fillMaxWidth(), fontSize = 14.sp)
+        Spacer(modifier = Modifier.height(4.dp))
         OutlinedTextField(
             value = tapWindowStr,
             onValueChange = { tapWindowStr = it; it.toIntOrNull()?.let { ms -> prefs.edit().putInt("tap_window", ms).apply() } },
@@ -639,7 +640,7 @@ fun TimerCoverScreen(prefs: android.content.SharedPreferences, onTripleTap: () -
     }
 
     Column(
-        modifier = Modifier.fillMaxSize().background(Color.Black).padding(32.dp),
+        modifier = Modifier.fillMaxSize().background(Color.Black).padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.SpaceBetween
     ) {
