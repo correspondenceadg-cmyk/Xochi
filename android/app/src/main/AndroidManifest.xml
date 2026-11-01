@@ -24,6 +24,7 @@
             </intent-filter>
         </activity>
 
+        <receiver android:name=".SafeReceiver" android:exported="false" />
         <service
             android:name=".TrackingService"
             android:foregroundServiceType="location"

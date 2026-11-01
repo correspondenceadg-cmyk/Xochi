@@ -6,9 +6,54 @@
     <title>Xochi</title>
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="stylesheet" href="/src/style.css" />
+    <style>
+      #splash {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: #0f172a;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 99999;
+        transition: opacity 0.5s ease-out;
+      }
+      #splash img {
+        width: 200px;
+        margin-bottom: 20px;
+      }
+      #splash h1 {
+        color: white;
+        font-family: serif;
+        font-size: 3rem;
+      }
+    </style>
   </head>
   <body>
+    <div id="splash">
+      <img src="/logo.png" alt="Xochi Logo" />
+      <h1>Xochi</h1>
+    </div>
     <div id="app"></div>
     <script type="module" src="/src/main.ts"></script>
+    <script>
+      const isFirst = !localStorage.getItem('has_launched');
+      localStorage.setItem('has_launched', 'true');
+      
+      const minDelay = isFirst ? 7 : 5;
+      const maxDelay = isFirst ? 25 : 30;
+      const delay = (Math.random() * (maxDelay - minDelay) + minDelay) * 1000;
+      
+      setTimeout(() => {
+        const splash = document.getElementById('splash');
+        if (splash) {
+          splash.style.opacity = '0';
+          setTimeout(() => splash.remove(), 500);
+        }
+      }, delay);
+    </script>
   </body>
 </html>

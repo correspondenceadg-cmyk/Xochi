@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.app.PendingIntent
 import android.os.Build
 import android.os.Bundle
 import android.os.Vibrator
@@ -247,6 +248,36 @@ class MainActivity : ComponentActivity() {
                 System.exit(0)
             }
         }
+    }
+
+    if (showPinDialog) {
+        val savedPin = prefs.getString("cover_mode_pin", "1234") ?: "1234"
+        AlertDialog(
+            onDismissRequest = { showPinDialog = false; pinInput = "" },
+            title = { Text("Enter PIN") },
+            text = {
+                OutlinedTextField(
+                    value = pinInput,
+                    onValueChange = { pinInput = it },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                    singleLine = true
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (pinInput == savedPin) {
+                        showPinDialog = false
+                        pinInput = ""
+                        onExitCover()
+                    } else {
+                        pinInput = ""
+                    }
+                }) { Text("Unlock") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPinDialog = false; pinInput = "" }) { Text("Cancel") }
+            }
+        )
     }
 }
 
@@ -589,6 +620,27 @@ fun SettingsScreen(prefs: android.content.SharedPreferences, onClose: () -> Unit
         ) { Text("Send Test Alert", color = Color(0xFF38BDF8), fontSize = 14.sp) }
 
         Spacer(modifier = Modifier.height(16.dp))
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text("Show 'I'm Safe' in Notification", color = Color.White, fontSize = 14.sp)
+            Switch(
+                checked = prefs.getBoolean("enable_notification_action", true),
+                onCheckedChange = { prefs.edit().putBoolean("enable_notification_action", it).apply() }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+        Text("Cover Mode PIN", color = Color.White, modifier = Modifier.fillMaxWidth(), fontSize = 14.sp)
+        Spacer(modifier = Modifier.height(4.dp))
+        OutlinedTextField(
+            value = prefs.getString("cover_mode_pin", "1234") ?: "1234",
+            onValueChange = { prefs.edit().putString("cover_mode_pin", it).apply() },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color(0xFF38BDF8), unfocusedBorderColor = Color(0xFF1E293B), focusedTextColor = Color.White, unfocusedTextColor = Color.White)
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
         Text("Grace Period (seconds)", color = Color.White, modifier = Modifier.fillMaxWidth(), fontSize = 14.sp)
         Spacer(modifier = Modifier.height(4.dp))
         OutlinedTextField(
@@ -641,6 +693,8 @@ fun TimerCoverScreen(prefs: android.content.SharedPreferences, onTripleTap: () -
     var targetTimeMs by remember { mutableStateOf(10 * 60 * 1000L) }
     var tapCount by remember { mutableStateOf(0) }
     var lastTapTime by remember { mutableStateOf(0L) }
+    var showPinDialog by remember { mutableStateOf(false) }
+    var pinInput by remember { mutableStateOf("") }
 
     LaunchedEffect(isRunning) {
         while (isRunning) {
@@ -659,7 +713,19 @@ fun TimerCoverScreen(prefs: android.content.SharedPreferences, onTripleTap: () -
         verticalArrangement = Arrangement.SpaceBetween
     ) {
         Box(
-            modifier = Modifier.fillMaxWidth().height(60.dp).combinedClickable(onClick = {}, onLongClick = { onExitCover() }),
+            modifier = Modifier.fillMaxWidth().height(60.dp).combinedClickable(
+                onClick = {
+                    val now = System.currentTimeMillis()
+                    if (now - lastTapTime > 1000) tapCount = 0
+                    tapCount++
+                    lastTapTime = now
+                    if (tapCount >= 5) {
+                        tapCount = 0
+                        showPinDialog = true
+                    }
+                },
+                onLongClick = {}
+            ),
             contentAlignment = Alignment.Center
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
