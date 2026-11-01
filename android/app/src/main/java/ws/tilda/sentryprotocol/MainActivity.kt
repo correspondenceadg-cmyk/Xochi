@@ -1,6 +1,7 @@
 package ws.tilda.sentryprotocol
 
 import android.Manifest
+import android.app.KeyguardManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -20,12 +21,14 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -60,6 +63,7 @@ class MainActivity : ComponentActivity() {
     private var tripId by mutableStateOf("")
     private var expiresAt by mutableStateOf(0L)
     private var graceSecs by mutableStateOf(0)
+    private var isStarting by mutableStateOf(false) // Global loading state
     private val client = OkHttpClient()
     private val API_BASE = "https://xochi.deplexo.com"
 
@@ -100,6 +104,7 @@ class MainActivity : ComponentActivity() {
                     tripId = tripId,
                     expiresAt = expiresAt,
                     graceSecs = graceSecs,
+                    isStarting = isStarting,
                     onStartTrip = { minutes -> startTrip(minutes) },
                     onSafe = { closeTrip("safe") },
                     onExtend = { extendTrip(10) },
@@ -135,6 +140,8 @@ class MainActivity : ComponentActivity() {
         val prefs = getSharedPreferences("xochi_prefs", Context.MODE_PRIVATE)
         val email = prefs.getString("contact_email", "emergency@example.com") ?: "emergency@example.com"
         val grace = prefs.getInt("grace_period", 0)
+        
+        isStarting = true
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
@@ -162,7 +169,11 @@ class MainActivity : ComponentActivity() {
                     graceSecs = grace
                     vibrate()
                 }
-            } catch (e: Exception) { }
+            } catch (e: Exception) {
+                runOnUiThread { Toast.makeText(this@MainActivity, "Failed to connect", Toast.LENGTH_SHORT).show() }
+            } finally {
+                runOnUiThread { isStarting = false }
+            }
         }
     }
 
@@ -270,6 +281,7 @@ fun AppRoot(
     tripId: String,
     expiresAt: Long,
     graceSecs: Int,
+    isStarting: Boolean,
     onStartTrip: (Int) -> Unit,
     onSafe: () -> Unit,
     onExtend: () -> Unit,
@@ -292,6 +304,7 @@ fun AppRoot(
         isCoverMode -> TimerCoverScreen(prefs, onTripleTap = { onPanic() }, onExitCover = { isCoverMode = false })
         tripId.isNotEmpty() -> ActiveTripScreen(tripId, expiresAt, graceSecs, onSafe, onExtend, onDistress)
         else -> HomeScreen(
+            isStarting = isStarting,
             onStartTrip = onStartTrip,
             onOpenSettings = { showSettings = true },
             onOpenCover = { isCoverMode = true }
@@ -318,11 +331,10 @@ fun SplashScreen() {
 // HomeScreen
 
 @Composable
-fun HomeScreen(onStartTrip: (Int) -> Unit, onOpenSettings: () -> Unit, onOpenCover: () -> Unit) {
+fun HomeScreen(isStarting: Boolean, onStartTrip: (Int) -> Unit, onOpenSettings: () -> Unit, onOpenCover: () -> Unit) {
     val customFont = getCustomFont()
     var selectedMinutes by remember { mutableStateOf(10) }
     var customMinutes by remember { mutableStateOf("") }
-    var isStarting by remember { mutableStateOf(false) }
     val times = listOf(5, 10, 15, 30)
     
     val infiniteTransition = rememberInfiniteTransition(label = "spinner")
@@ -394,10 +406,7 @@ fun HomeScreen(onStartTrip: (Int) -> Unit, onOpenSettings: () -> Unit, onOpenCov
             
             val finalMinutes = if (customMinutes.isNotEmpty()) customMinutes.toIntOrNull() ?: 10 else selectedMinutes
             Button(
-                onClick = { 
-                    isStarting = true
-                    onStartTrip(finalMinutes) 
-                },
+                onClick = { onStartTrip(finalMinutes) },
                 enabled = !isStarting,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color(0xFF38BDF8),
@@ -552,6 +561,7 @@ fun ActiveTripScreen(tripId: String, expiresAt: Long, graceSecs: Int, onSafe: ()
 
 // SettingsScreen
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(prefs: android.content.SharedPreferences, onClose: () -> Unit) {
     val context = LocalContext.current
@@ -559,6 +569,10 @@ fun SettingsScreen(prefs: android.content.SharedPreferences, onClose: () -> Unit
     var contactEmail by remember { mutableStateOf(prefs.getString("contact_email", "emergency@example.com") ?: "") }
     var gracePeriodStr by remember { mutableStateOf(prefs.getInt("grace_period", 0).toString()) }
     var coverPin by remember { mutableStateOf(prefs.getString("cover_mode_pin", "1234") ?: "1234") }
+    
+    // New state for Auth Type
+    var authType by remember { mutableStateOf(prefs.getString("cover_mode_auth", "pin") ?: "pin") }
+    var dropdownExpanded by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier.fillMaxSize().background(Color(0xFF0F172A)).padding(24.dp),
@@ -612,17 +626,53 @@ fun SettingsScreen(prefs: android.content.SharedPreferences, onClose: () -> Unit
         }
 
         Spacer(modifier = Modifier.height(16.dp))
-        Text("Cover Mode PIN", color = Color.White, modifier = Modifier.fillMaxWidth(), fontSize = 14.sp)
+        Text("Cover Mode Auth Method", color = Color.White, modifier = Modifier.fillMaxWidth(), fontSize = 14.sp)
         Spacer(modifier = Modifier.height(4.dp))
-        OutlinedTextField(
-            value = coverPin,
-            onValueChange = { coverPin = it; prefs.edit().putString("cover_mode_pin", it).apply() },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-            visualTransformation = PasswordVisualTransformation(),
-            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color(0xFF38BDF8), unfocusedBorderColor = Color(0xFF1E293B), focusedTextColor = Color.White, unfocusedTextColor = Color.White)
-        )
+        ExposedDropdownMenuBox(
+            expanded = dropdownExpanded,
+            onExpandedChange = { dropdownExpanded = !dropdownExpanded }
+        ) {
+            OutlinedTextField(
+                value = when(authType) { "none" -> "None (Tap 5x)"; "system" -> "System PIN/Pattern"; else -> "Custom PIN" },
+                onValueChange = {},
+                readOnly = true,
+                trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = Color.White) },
+                modifier = Modifier.fillMaxWidth().menuAnchor(),
+                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color(0xFF38BDF8), unfocusedBorderColor = Color(0xFF1E293B), focusedTextColor = Color.White, unfocusedTextColor = Color.White)
+            )
+            ExposedDropdownMenu(
+                expanded = dropdownExpanded,
+                onDismissRequest = { dropdownExpanded = false }
+            ) {
+                DropdownMenuItem(
+                    text = { Text("None (Tap 5x)") },
+                    onClick = { authType = "none"; prefs.edit().putString("cover_mode_auth", "none").apply(); dropdownExpanded = false }
+                )
+                DropdownMenuItem(
+                    text = { Text("Custom PIN") },
+                    onClick = { authType = "pin"; prefs.edit().putString("cover_mode_auth", "pin").apply(); dropdownExpanded = false }
+                )
+                DropdownMenuItem(
+                    text = { Text("System PIN/Pattern") },
+                    onClick = { authType = "system"; prefs.edit().putString("cover_mode_auth", "system").apply(); dropdownExpanded = false }
+                )
+            }
+        }
+
+        if (authType == "pin") {
+            Spacer(modifier = Modifier.height(12.dp))
+            Text("Custom Cover Mode PIN", color = Color.White, modifier = Modifier.fillMaxWidth(), fontSize = 14.sp)
+            Spacer(modifier = Modifier.height(4.dp))
+            OutlinedTextField(
+                value = coverPin,
+                onValueChange = { coverPin = it; prefs.edit().putString("cover_mode_pin", it).apply() },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                visualTransformation = PasswordVisualTransformation(),
+                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color(0xFF38BDF8), unfocusedBorderColor = Color(0xFF1E293B), focusedTextColor = Color.White, unfocusedTextColor = Color.White)
+            )
+        }
 
         Spacer(modifier = Modifier.height(16.dp))
         Text("Grace Period (seconds)", color = Color.White, modifier = Modifier.fillMaxWidth(), fontSize = 14.sp)
@@ -670,6 +720,9 @@ fun SettingsScreen(prefs: android.content.SharedPreferences, onClose: () -> Unit
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TimerCoverScreen(prefs: android.content.SharedPreferences, onTripleTap: () -> Unit, onExitCover: () -> Unit) {
+    val context = LocalContext.current
+    val activity = context as? ComponentActivity
+
     val tapWindow = prefs.getInt("tap_window", 1500).toLong()
     var isRunning by remember { mutableStateOf(false) }
     var isTimerMode by remember { mutableStateOf(false) }
@@ -679,6 +732,12 @@ fun TimerCoverScreen(prefs: android.content.SharedPreferences, onTripleTap: () -
     var lastTapTime by remember { mutableStateOf(0L) }
     var showPinDialog by remember { mutableStateOf(false) }
     var pinInput by remember { mutableStateOf("") }
+
+    val biometricLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == ComponentActivity.RESULT_OK) {
+            onExitCover()
+        }
+    }
 
     LaunchedEffect(isRunning) {
         while (isRunning) {
@@ -705,7 +764,21 @@ fun TimerCoverScreen(prefs: android.content.SharedPreferences, onTripleTap: () -
                     lastTapTime = now
                     if (tapCount >= 5) {
                         tapCount = 0
-                        showPinDialog = true
+                        val authType = prefs.getString("cover_mode_auth", "pin")
+                        when (authType) {
+                            "none" -> onExitCover()
+                            "system" -> {
+                                val km = activity?.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
+                                val intent = km.createConfirmDeviceCredentialIntent("Unlock Cover Mode", "Enter device credentials")
+                                if (intent != null && activity != null) {
+                                    biometricLauncher.launch(intent)
+                                } else {
+                                    // Fallback if no system pin/pattern is set
+                                    showPinDialog = true
+                                }
+                            }
+                            else -> showPinDialog = true // "pin"
+                        }
                     }
                 },
                 onLongClick = {}
