@@ -218,6 +218,17 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+// Helpers
+
+@Composable
+fun getCustomFont(): FontFamily {
+    return try {
+        FontFamily(androidx.compose.ui.text.font.Font(R.font.el_abogado_loco))
+    } catch (e: Exception) {
+        FontFamily.Serif
+    }
+}
+
 // AppRoot
 
 @Composable
@@ -257,12 +268,7 @@ fun AppRoot(
 
 @Composable
 fun SplashScreen() {
-val customFont = try {
-    customFont
-} catch (e: Exception) {
-    FontFamily.Serif
-}
-
+    val customFont = getCustomFont()
     Column(
         modifier = Modifier.fillMaxSize().background(Color(0xFF0F172A)),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -278,12 +284,7 @@ val customFont = try {
 
 @Composable
 fun HomeScreen(onStartTrip: (Int) -> Unit, onOpenSettings: () -> Unit, onOpenCover: () -> Unit) {
-val customFont = try {
-    customFont
-} catch (e: Exception) {
-    FontFamily.Serif
-}
-
+    val customFont = getCustomFont()
     var selectedMinutes by remember { mutableStateOf(10) }
     val times = listOf(5, 10, 15, 30)
 
