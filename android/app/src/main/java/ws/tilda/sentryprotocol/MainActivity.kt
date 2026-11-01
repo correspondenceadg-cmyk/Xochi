@@ -257,6 +257,12 @@ fun AppRoot(
 
 @Composable
 fun SplashScreen() {
+val customFont = try {
+    customFont
+} catch (e: Exception) {
+    FontFamily.Serif
+}
+
     Column(
         modifier = Modifier.fillMaxSize().background(Color(0xFF0F172A)),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -264,7 +270,7 @@ fun SplashScreen() {
     ) {
         Image(painter = painterResource(id = R.drawable.logo), contentDescription = "Logo", modifier = Modifier.size(250.dp))
         Spacer(modifier = Modifier.height(24.dp))
-        Text("Xochi", color = Color.White, fontSize = 56.sp, fontFamily = FontFamily(androidx.compose.ui.text.font.Font(R.font.el_abogado_loco)))
+        Text("Xochi", color = Color.White, fontSize = 56.sp, fontFamily = customFont)
     }
 }
 
@@ -272,6 +278,12 @@ fun SplashScreen() {
 
 @Composable
 fun HomeScreen(onStartTrip: (Int) -> Unit, onOpenSettings: () -> Unit, onOpenCover: () -> Unit) {
+val customFont = try {
+    customFont
+} catch (e: Exception) {
+    FontFamily.Serif
+}
+
     var selectedMinutes by remember { mutableStateOf(10) }
     val times = listOf(5, 10, 15, 30)
 
@@ -287,14 +299,14 @@ fun HomeScreen(onStartTrip: (Int) -> Unit, onOpenSettings: () -> Unit, onOpenCov
         ) {
             Image(painter = painterResource(id = R.drawable.logo), contentDescription = "Logo", modifier = Modifier.size(200.dp))
             Spacer(modifier = Modifier.height(24.dp))
-            Text("Xochi", color = Color.White, fontSize = 48.sp, fontFamily = FontFamily(androidx.compose.ui.text.font.Font(R.font.el_abogado_loco)))
+            Text("Xochi", color = Color.White, fontSize = 48.sp, fontFamily = customFont)
             Spacer(modifier = Modifier.height(16.dp))
             Text(
                 "A trip-scoped safety check-in. Set a timer for your walk. If you don't tap \"Safe\" before time runs out, we'll alert your emergency contact.",
                 color = Color(0xFF94A3B8),
                 fontSize = 16.sp,
                 textAlign = TextAlign.Center,
-                fontFamily = FontFamily(androidx.compose.ui.text.font.Font(R.font.el_abogado_loco))
+                fontFamily = customFont
             )
             Spacer(modifier = Modifier.height(32.dp))
 
