@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/correspondenceadg-cmyk/Xochi/server"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -35,16 +36,26 @@ func main() {
 	}
 
 	var n server.Notifier
-	resendKey := os.Getenv("RESEND_KEY")
-	if resendKey != "" {
-		n = server.ResendNotifier{APIKey: resendKey, From: "alerts@xochi.app"}
-		log.Println("using Resend notifier")
+	brevoKey := os.Getenv("BREVO_API_KEY")
+	brevoSender := os.Getenv("BREVO_SENDER_EMAIL")
+	if brevoKey != "" {
+		n = server.BrevoNotifier{APIKey: brevoKey, Sender: brevoSender}
+		log.Println("using Brevo notifier")
 	} else {
 		n = server.LogNotifier{}
 		log.Println("using Log notifier")
 	}
 
 	s := server.New(st, n, secret)
+	
+	srv := &http.Server{
+		Addr:         ":" + port,
+		Handler:      s.Handler(),
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  120 * time.Second,
+	}
+
 	log.Printf("listening on :%s", port)
-	log.Fatal(http.ListenAndServe(":"+port, s.Handler()))
+	log.Fatal(srv.ListenAndServe())
 }
