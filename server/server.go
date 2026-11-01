@@ -115,6 +115,7 @@ func (s *Server) open(w http.ResponseWriter, r *http.Request) {
 		NextContactPriority: 1,
 	}
 	if err := s.Store.Create(r.Context(), t); err != nil {
+		slog.Error("create_trip_failed", "error", err)
 		writeJSON(w, 500, map[string]string{"error": "internal"})
 		return
 	}
