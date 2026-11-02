@@ -1,4 +1,4 @@
-const API_BASE = 'https://xochi.deplexo.com';
+const API_BASE = 'https://xochiquetzal.de.deplexo.com';
 
 async function triggerPanic() {
   document.body.innerHTML = '<div style="background:#000;width:100vw;height:100vh;position:fixed;top:0;left:0;z-index:9999;"></div>';

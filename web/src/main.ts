@@ -1,3 +1,5 @@
+import { renderCover } from './cover';
+
 const API_BASE = 'https://xochiquetzal.de.deplexo.com';
 
 let state = { id: '', expiresAt: 0, graceSecs: 0, timerInterval: 0, notified: false };
@@ -119,6 +121,7 @@ function renderBind() {
       </div>
 
       <button id="start" class="btn btn-primary">Start Walk</button>
+      <button id="cover-btn" class="btn btn-secondary" style="margin-top: 1rem; font-size: 0.85rem;">Enter Cover Mode</button>
     </div>
   `;
 
@@ -154,6 +157,10 @@ function renderBind() {
       btn.disabled = false;
       btn.innerHTML = "Start Walk";
     }
+  };
+
+  document.getElementById('cover-btn')!.onclick = () => {
+    renderCover();
   };
 }
 
