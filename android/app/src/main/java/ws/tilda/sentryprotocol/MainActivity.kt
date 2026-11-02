@@ -65,6 +65,7 @@ class MainActivity : ComponentActivity() {
     private var expiresAt by mutableStateOf(0L)
     private var graceSecs by mutableStateOf(0)
     private var isStarting by mutableStateOf(false) // Global loading state
+    private var alertMessage by mutableStateOf<String?>(null)
     private val client = OkHttpClient.Builder()
         .addInterceptor { chain ->
             val request = chain.request().newBuilder()
@@ -119,6 +120,16 @@ class MainActivity : ComponentActivity() {
                     onDistress = { triggerDistress() },
                     onPanic = { triggerPanic() }
                 )
+                alertMessage?.let { msg ->
+                    androidx.compose.material3.AlertDialog(
+                        onDismissRequest = { alertMessage = null },
+                        title = { androidx.compose.material3.Text("Notice") },
+                        text = { androidx.compose.material3.Text(msg) },
+                        confirmButton = {
+                            androidx.compose.material3.TextButton(onClick = { alertMessage = null }) { androidx.compose.material3.Text("OK") }
+                        }
+                    )
+                }
             }
         }
     }
@@ -149,7 +160,7 @@ class MainActivity : ComponentActivity() {
     private fun startTrip(minutes: Int) {
         val prefs = getSharedPreferences("xochi_prefs", Context.MODE_PRIVATE)
         val email = prefs.getString("contact_email", "emergency@example.com") ?: "emergency@example.com"
-        val grace = prefs.getInt("grace_period", 0)
+        val grace = prefs.getInt("grace_period", 60)
         
         isStarting = true
 
@@ -600,7 +611,7 @@ fun SettingsScreen(prefs: android.content.SharedPreferences, onClose: () -> Unit
     val context = LocalContext.current
     var tapWindowStr by remember { mutableStateOf(prefs.getInt("tap_window", 1500).toString()) }
     var contactEmail by remember { mutableStateOf(prefs.getString("contact_email", "emergency@example.com") ?: "") }
-    var gracePeriodStr by remember { mutableStateOf(prefs.getInt("grace_period", 0).toString()) }
+    var gracePeriodStr by remember { mutableStateOf(prefs.getInt("grace_period", 60).toString()) }
     var coverPin by remember { mutableStateOf(prefs.getString("cover_mode_pin", "1234") ?: "1234") }
     
     // New state for Auth Type

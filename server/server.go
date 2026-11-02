@@ -46,7 +46,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/contact/ack/{token}", s.ack)
 	mux.HandleFunc("GET /v1/contact/revoke/{token}", s.revoke)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, 200, map[string]any{"status": "ok", "last_tick_at": s.lastTick.Load()})
+		notifierType := "log"
+		if _, ok := s.Notifier.(BrevoNotifier); ok {
+			notifierType = "brevo"
+		}
+		writeJSON(w, 200, map[string]any{"status": "ok", "last_tick_at": s.lastTick.Load(), "notifier": notifierType})
 	})
 	return cors(s.rl.limit(mux))
 }
