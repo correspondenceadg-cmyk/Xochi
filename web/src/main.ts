@@ -106,8 +106,8 @@ function renderBind() {
       </p>
 
       <div class="input-group">
-        <label>Emergency Contact Email</label>
-        <input id="email" type="email" placeholder="contact@example.com" />
+        <label>Emergency Contacts (comma separated)</label>
+        <input id="email" type="text" placeholder="contact@example.com, +15550100" />
       </div>
 
       <div class="input-group">
@@ -127,11 +127,13 @@ function renderBind() {
 
   document.getElementById('start')!.onclick = async () => {
     const btn = document.getElementById('start') as HTMLButtonElement;
-    const email = (document.getElementById('email') as HTMLInputElement).value;
+    const emailInput = (document.getElementById('email') as HTMLInputElement).value;
+    const contacts = emailInput.split(',').map(c => c.trim()).filter(c => c.length > 0);
     const windowMins = parseInt((document.getElementById('window') as HTMLInputElement).value);
     const grace = parseInt((document.getElementById('grace') as HTMLInputElement).value);
     
-    if (!email || !windowMins) return alert("Please fill in required fields");
+    if (contacts.length === 0 || !windowMins) return alert("Please fill in required fields");
+    if (contacts.length > 5) return alert("Maximum 5 contacts allowed");
 
     btn.disabled = true;
     btn.innerHTML = LOADING_SVG;
@@ -140,7 +142,7 @@ function renderBind() {
       const res = await fetch(`${API_BASE}/v1/interval`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ window_minutes: windowMins, grace_secs: grace, contacts: [email], message: "Walking" })
+        body: JSON.stringify({ window_minutes: windowMins, grace_secs: grace, contacts: contacts, message: "Walking" })
       });
       const data = await res.json();
       if (data.id) {

@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.0.3] - 2026-11-02
+### Added
+- **Multi-Contact Support:** The app now accepts comma-separated emails and phone numbers (up to 5 contacts). The backend will automatically escalate through them if the primary contact does not acknowledge the alert.
+
 ## [1.0.2] - 2026-11-02
 ### Added
 - Dynamic PWA deployment (supports both GitHub Pages and Vercel seamlessly).

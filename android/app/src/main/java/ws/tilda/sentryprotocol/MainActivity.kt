@@ -191,14 +191,16 @@ class MainActivity : ComponentActivity() {
 
     private fun startTrip(minutes: Int) {
         val prefs = getSharedPreferences("xochi_prefs", Context.MODE_PRIVATE)
-        val email = prefs.getString("contact_email", "emergency@example.com") ?: "emergency@example.com"
+        val contactInput = prefs.getString("contact_input", "emergency@example.com") ?: "emergency@example.com"
+        val contactsList = contactInput.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+        val contactsJson = contactsList.joinToString(prefix = "[", postfix = "]") { "\"$it\"" }
         val grace = prefs.getInt("grace_period", 60)
         
         isStarting = true
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val json = """{"window_minutes":$minutes,"grace_secs":$grace,"contacts":["$email"],"message":"Android Walk"}"""
+                val json = """{"window_minutes":$minutes,"grace_secs":$grace,"contacts":$contactsJson,"message":"Android Walk"}"""
                 val body = json.toRequestBody("application/json".toMediaType())
                 val req = Request.Builder().url("$API_BASE/v1/interval").post(body).build()
                 val res = client.newCall(req).execute()
@@ -645,7 +647,7 @@ fun ActiveTripScreen(tripId: String, expiresAt: Long, graceSecs: Int, onSafe: ()
 fun SettingsScreen(prefs: android.content.SharedPreferences, onClose: () -> Unit) {
     val context = LocalContext.current
     var tapWindowStr by remember { mutableStateOf(prefs.getInt("tap_window", 1500).toString()) }
-    var contactEmail by remember { mutableStateOf(prefs.getString("contact_email", "emergency@example.com") ?: "") }
+    var contactInput by remember { mutableStateOf(prefs.getString("contact_input", "emergency@example.com") ?: "") }
     var gracePeriodStr by remember { mutableStateOf(prefs.getInt("grace_period", 60).toString()) }
     var coverPin by remember { mutableStateOf(prefs.getString("cover_mode_pin", "1234") ?: "1234") }
     
@@ -662,11 +664,11 @@ fun SettingsScreen(prefs: android.content.SharedPreferences, onClose: () -> Unit
         }
         Spacer(modifier = Modifier.height(16.dp))
 
-        Text("Emergency Contact Email", color = Color.White, modifier = Modifier.fillMaxWidth(), fontSize = 14.sp)
+        Text("Emergency Contacts (comma separated)", color = Color.White, modifier = Modifier.fillMaxWidth(), fontSize = 14.sp)
         Spacer(modifier = Modifier.height(4.dp))
         OutlinedTextField(
-            value = contactEmail,
-            onValueChange = { contactEmail = it; prefs.edit().putString("contact_email", it).apply() },
+            value = contactInput,
+            onValueChange = { contactInput = it; prefs.edit().putString("contact_input", it).apply() },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color(0xFF38BDF8), unfocusedBorderColor = Color(0xFF1E293B), focusedTextColor = Color.White, unfocusedTextColor = Color.White)
@@ -677,7 +679,8 @@ fun SettingsScreen(prefs: android.content.SharedPreferences, onClose: () -> Unit
             onClick = {
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
-                        val json = """{"email":"$contactEmail"}"""
+                        val firstEmail = contactInput.split(",").firstOrNull { it.contains("@") }?.trim() ?: "emergency@example.com"
+                        val json = """{"email":"$firstEmail"}"""
                         val body = json.toRequestBody("application/json".toMediaType())
                         val req = Request.Builder().url("https://xochiquetzal.de.deplexo.com/v1/test-alert")
                             .header("User-Agent", "Mozilla/5.0 (Android) Xochi/1.0")
