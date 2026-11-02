@@ -134,14 +134,16 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun vibrate() {
-        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
-            vibratorManager.defaultVibrator
-        } else {
-            @Suppress("DEPRECATION")
-            getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-        }
-        vibrator.vibrate(android.os.VibrationEffect.createOneShot(100, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
+        try {
+            val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+                vibratorManager.defaultVibrator
+            } else {
+                @Suppress("DEPRECATION")
+                getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+            }
+            vibrator.vibrate(android.os.VibrationEffect.createOneShot(100, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
+        } catch (e: Exception) { }
     }
 
     private fun startTrip(minutes: Int) {
@@ -171,9 +173,15 @@ class MainActivity : ComponentActivity() {
                     .putInt("active_trip_grace", grace)
                     .apply()
 
-                val intent = Intent(this@MainActivity, TrackingService::class.java)
-                intent.putExtra("TRIP_ID", newId)
-                ContextCompat.startForegroundService(this@MainActivity, intent)
+                val hasPerm = ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED ||
+                              ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.ACCESS_COARSE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                if (hasPerm) {
+                    val intent = Intent(this@MainActivity, TrackingService::class.java)
+                    intent.putExtra("TRIP_ID", newId)
+                    ContextCompat.startForegroundService(this@MainActivity, intent)
+                } else {
+                    throw Exception("Location permission missing. Cannot start tracking.")
+                }
 
                 runOnUiThread {
                     tripId = newId
@@ -181,9 +189,9 @@ class MainActivity : ComponentActivity() {
                     graceSecs = grace
                     vibrate()
                 }
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 runOnUiThread { 
-                    Toast.makeText(this@MainActivity, "Error: ${e.message}", Toast.LENGTH_LONG).show() 
+                    Toast.makeText(this@MainActivity, "Error: ${e.message ?: e.toString()}", Toast.LENGTH_LONG).show() 
                     android.util.Log.e("XochiNetwork", "Connection failed", e)
                 }
             } finally {
@@ -208,7 +216,7 @@ class MainActivity : ComponentActivity() {
                 val newExp = obj.getLong("expires_at")
                 prefs.edit().putLong("active_trip_expires_at", newExp).apply()
                 runOnUiThread { expiresAt = newExp; vibrate() }
-            } catch (e: Exception) { }
+            } catch (e: Throwable) { }
         }
     }
 
@@ -221,7 +229,7 @@ class MainActivity : ComponentActivity() {
                     .post("{}".toRequestBody("application/json".toMediaType()))
                     .build()
                 client.newCall(req).execute()
-            } catch (e: Exception) { }
+            } catch (e: Throwable) { }
             prefs.edit().remove("active_trip_id").remove("active_trip_expires_at").remove("active_trip_grace").apply()
             runOnUiThread {
                 tripId = ""
@@ -241,7 +249,7 @@ class MainActivity : ComponentActivity() {
                         .post("{}".toRequestBody("application/json".toMediaType()))
                         .build()
                     client.newCall(req).execute()
-                } catch (e: Exception) { }
+                } catch (e: Throwable) { }
             }
             prefs.edit().remove("active_trip_id").remove("active_trip_expires_at").remove("active_trip_grace").apply()
             runOnUiThread {
@@ -272,7 +280,7 @@ class MainActivity : ComponentActivity() {
                     .post("{}".toRequestBody("application/json".toMediaType()))
                     .build()
                 client.newCall(distressReq).execute()
-            } catch (e: Exception) { }
+            } catch (e: Throwable) { }
             prefs.edit().remove("active_trip_id").remove("active_trip_expires_at").remove("active_trip_grace").apply()
             runOnUiThread {
                 finishAffinity()
@@ -288,7 +296,7 @@ class MainActivity : ComponentActivity() {
 fun getCustomFont(): FontFamily {
     return try {
         FontFamily(androidx.compose.ui.text.font.Font(R.font.el_abogado_loco))
-    } catch (e: Exception) {
+    } catch (e: Throwable) {
         FontFamily.Serif
     }
 }
@@ -379,7 +387,7 @@ fun HomeScreen(isStarting: Boolean, onStartTrip: (Int) -> Unit, onOpenSettings: 
             Text("Xochi", color = Color.White, fontSize = 36.sp, fontFamily = customFont)
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                "A trip-scoped safety check-in. Set a timer for your walk.",
+                "A personal safety app for anyone with somewhere to be but no one to meet when they get there.",
                 color = Color(0xFF94A3B8),
                 fontSize = 14.sp,
                 textAlign = TextAlign.Center,
@@ -627,7 +635,7 @@ fun SettingsScreen(prefs: android.content.SharedPreferences, onClose: () -> Unit
                         CoroutineScope(Dispatchers.Main).launch {
                             Toast.makeText(context, "Test alert sent", Toast.LENGTH_LONG).show()
                         }
-                    } catch (e: Exception) {
+                    } catch (e: Throwable) {
                         CoroutineScope(Dispatchers.Main).launch {
                             Toast.makeText(context, "Failed to send", Toast.LENGTH_SHORT).show()
                         }

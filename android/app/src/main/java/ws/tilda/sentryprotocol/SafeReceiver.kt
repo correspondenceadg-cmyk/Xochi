@@ -28,7 +28,7 @@ class SafeReceiver : BroadcastReceiver() {
                     }
                     .build()
                 val req = Request.Builder()
-                    .url("https://xochi.deplexo.com/v1/interval/$tripId/safe")
+                    .url("https://xochiquetzal.de.deplexo.com/v1/interval/$tripId/safe")
                     .post("{}".toRequestBody("application/json".toMediaType()))
                     .build()
                 client.newCall(req).execute()

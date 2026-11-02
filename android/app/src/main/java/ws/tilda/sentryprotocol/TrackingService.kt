@@ -29,34 +29,35 @@ class TrackingService : Service(), LocationListener {
     private val API_BASE = "https://xochiquetzal.de.deplexo.com"
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        tripId = intent?.getStringExtra("TRIP_ID") ?: return START_NOT_STICKY
-        createNotificationChannel()
-        
-        val notification = Notification.Builder(this, "xochi_channel")
-            .setContentTitle("Timer Active")
-            .setContentText("Tracking safety window...")
-            .setSmallIcon(android.R.drawable.ic_menu_compass)
-            .build()
-            
         try {
+            tripId = intent?.getStringExtra("TRIP_ID") ?: return START_NOT_STICKY
+            createNotificationChannel()
+            
+            val notification = androidx.core.app.NotificationCompat.Builder(this, "xochi_channel")
+                .setContentTitle("Timer Active")
+                .setContentText("Tracking safety window...")
+                .setSmallIcon(android.R.drawable.ic_menu_compass)
+                .setPriority(androidx.core.app.NotificationCompat.PRIORITY_LOW)
+                .build()
+                
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 startForeground(1, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
             } else {
                 startForeground(1, notification)
             }
-        } catch (e: Exception) {
+            startLocationUpdates()
+            return START_STICKY
+        } catch (e: Throwable) {
             stopSelf()
             return START_NOT_STICKY
         }
-        startLocationUpdates()
-        return START_STICKY
     }
 
     private fun startLocationUpdates() {
-        val lm = getSystemService(Context.LOCATION_SERVICE) as LocationManager
         try {
+            val lm = getSystemService(Context.LOCATION_SERVICE) as LocationManager
             lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 60000L, 10f, this)
-        } catch (e: SecurityException) { }
+        } catch (e: Exception) { }
     }
 
     override fun onLocationChanged(location: Location) {
