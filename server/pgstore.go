@@ -71,6 +71,7 @@ func (s *PgStore) Update(ctx context.Context, id string, fn func(*Trip) error) e
 		}
 		t.Contacts = append(t.Contacts, email)
 	}
+	rows.Close()
 
 	if err := fn(&t); err != nil {
 		return err
@@ -111,6 +112,7 @@ func (s *PgStore) Get(ctx context.Context, id string) (Trip, error) {
 		}
 		t.Contacts = append(t.Contacts, email)
 	}
+	rows.Close()
 
 	return t, nil
 }

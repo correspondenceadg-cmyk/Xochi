@@ -65,7 +65,14 @@ class MainActivity : ComponentActivity() {
     private var expiresAt by mutableStateOf(0L)
     private var graceSecs by mutableStateOf(0)
     private var isStarting by mutableStateOf(false) // Global loading state
-    private val client = OkHttpClient()
+    private val client = OkHttpClient.Builder()
+        .addInterceptor { chain ->
+            val request = chain.request().newBuilder()
+                .header("User-Agent", "Mozilla/5.0 (Android) Xochi/1.0")
+                .build()
+            chain.proceed(request)
+        }
+        .build()
     private val API_BASE = "https://xochiquetzal.de.deplexo.com"
 
     private val permissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
@@ -150,7 +157,11 @@ class MainActivity : ComponentActivity() {
                 val body = json.toRequestBody("application/json".toMediaType())
                 val req = Request.Builder().url("$API_BASE/v1/interval").post(body).build()
                 val res = client.newCall(req).execute()
-                val obj = JSONObject(res.body?.string() ?: "")
+                val responseBody = res.body?.string() ?: ""
+                if (!res.isSuccessful || responseBody.trimStart().startsWith("<")) {
+                    throw Exception("HTTP ${res.code}: ${responseBody.take(150)}")
+                }
+                val obj = JSONObject(responseBody)
                 val newId = obj.getString("id")
                 val newExp = obj.getLong("expires_at")
 
@@ -605,7 +616,9 @@ fun SettingsScreen(prefs: android.content.SharedPreferences, onClose: () -> Unit
                     try {
                         val json = """{"email":"$contactEmail"}"""
                         val body = json.toRequestBody("application/json".toMediaType())
-                        val req = Request.Builder().url("https://xochiquetzal.de.deplexo.com/v1/test-alert").post(body).build()
+                        val req = Request.Builder().url("https://xochiquetzal.de.deplexo.com/v1/test-alert")
+                            .header("User-Agent", "Mozilla/5.0 (Android) Xochi/1.0")
+                            .post(body).build()
                         OkHttpClient().newCall(req).execute()
                         CoroutineScope(Dispatchers.Main).launch {
                             Toast.makeText(context, "Test alert sent", Toast.LENGTH_LONG).show()

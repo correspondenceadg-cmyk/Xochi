@@ -19,7 +19,14 @@ class SafeReceiver : BroadcastReceiver() {
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val client = OkHttpClient()
+                val client = OkHttpClient.Builder()
+                    .addInterceptor { chain ->
+                        val request = chain.request().newBuilder()
+                            .header("User-Agent", "Mozilla/5.0 (Android) Xochi/1.0")
+                            .build()
+                        chain.proceed(request)
+                    }
+                    .build()
                 val req = Request.Builder()
                     .url("https://xochi.deplexo.com/v1/interval/$tripId/safe")
                     .post("{}".toRequestBody("application/json".toMediaType()))
