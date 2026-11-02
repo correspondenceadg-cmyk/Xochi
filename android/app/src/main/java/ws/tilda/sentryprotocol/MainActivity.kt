@@ -511,7 +511,7 @@ fun ActiveTripScreen(tripId: String, expiresAt: Long, graceSecs: Int, onSafe: ()
             val enableAction = prefs.getBoolean("enable_notification_action", true)
 
             val builder = NotificationCompat.Builder(context, "xochi_alerts")
-                .setSmallIcon(android.R.drawable.ic_menu_compass)
+                .setSmallIcon(R.drawable.ic_notification)
                 .setLargeIcon(android.graphics.drawable.Icon.createWithResource(context, R.drawable.logo))
                 .setContentTitle("Time Lapsed")
                 .setContentText("Your walking timer has ended. Tap \"I'm Safe\" or a distress signal will be sent.")

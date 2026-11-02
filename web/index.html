@@ -40,20 +40,14 @@
     <div id="app"></div>
     <script type="module" src="/src/main.ts"></script>
     <script>
-      const isFirst = !localStorage.getItem('has_launched');
-      localStorage.setItem('has_launched', 'true');
-      
-      const minDelay = isFirst ? 7 : 5;
-      const maxDelay = isFirst ? 25 : 30;
-      const delay = (Math.random() * (maxDelay - minDelay) + minDelay) * 1000;
-      
+      // Fast 1.5s splash screen
       setTimeout(() => {
         const splash = document.getElementById('splash');
         if (splash) {
           splash.style.opacity = '0';
           setTimeout(() => splash.remove(), 500);
         }
-      }, delay);
+      }, 1500);
     </script>
   </body>
 </html>

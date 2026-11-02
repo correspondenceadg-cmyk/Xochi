@@ -1,15 +1,21 @@
 {
   "name": "Xochi",
   "short_name": "Xochi",
-  "start_url": "/",
+  "start_url": "/Xochi/",
   "display": "standalone",
   "background_color": "#0f172a",
   "theme_color": "#0f172a",
   "icons": [
     {
-      "src": "/logo.png",
-      "sizes": "1024x1224",
-      "type": "image/png",
+      "src": "/Xochi/logo.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/Xochi/logo.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
       "purpose": "any maskable"
     }
   ]
