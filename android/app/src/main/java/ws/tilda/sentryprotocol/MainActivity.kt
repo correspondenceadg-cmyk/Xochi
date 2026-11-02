@@ -67,6 +67,8 @@ class MainActivity : ComponentActivity() {
     private var graceSecs by mutableStateOf(0)
     private var isStarting by mutableStateOf(false)
     private var alertMessage by mutableStateOf<String?>(null)
+    private var volumeDownCount = 0
+    private var lastVolumeDownTime = 0L
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
         .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
@@ -143,6 +145,25 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        if (event.keyCode == android.view.KeyEvent.KEYCODE_VOLUME_DOWN) {
+            if (event.action == android.view.KeyEvent.ACTION_DOWN) {
+                val now = System.currentTimeMillis()
+                if (now - lastVolumeDownTime > 1500) {
+                    volumeDownCount = 0
+                }
+                volumeDownCount++
+                lastVolumeDownTime = now
+                if (volumeDownCount >= 5) {
+                    volumeDownCount = 0
+                    triggerPanic()
+                }
+            }
+            return true
+        }
+        return super.dispatchKeyEvent(event)
     }
 
     // Logic

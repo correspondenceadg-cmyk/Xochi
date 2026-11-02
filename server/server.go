@@ -107,8 +107,8 @@ func (s *Server) open(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, c := range in.Contacts {
-		if !strings.Contains(c, "@") {
-			fail(w, errors.New("contacts must be email addresses"))
+		if !strings.Contains(c, "@") && !strings.HasPrefix(c, "+") {
+			fail(w, errors.New("contacts must be email addresses or phone numbers (e.g. +15550100)"))
 			return
 		}
 	}

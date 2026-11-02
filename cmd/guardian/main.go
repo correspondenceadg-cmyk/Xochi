@@ -35,16 +35,21 @@ func main() {
 		log.Println("using memory store")
 	}
 
-	var n server.Notifier
+	var emailNotifier server.Notifier = server.LogNotifier{}
 	brevoKey := os.Getenv("BREVO_API_KEY")
-	brevoSender := os.Getenv("BREVO_SENDER_EMAIL")
 	if brevoKey != "" {
-		n = server.BrevoNotifier{APIKey: brevoKey, Sender: brevoSender}
+		emailNotifier = server.BrevoNotifier{APIKey: brevoKey, Sender: os.Getenv("BREVO_SENDER_EMAIL")}
 		log.Println("using Brevo notifier")
-	} else {
-		n = server.LogNotifier{}
-		log.Println("using Log notifier")
 	}
+
+	var smsNotifier server.Notifier = server.LogNotifier{}
+	textbeeKey := os.Getenv("TEXTBEE_API_KEY")
+	if textbeeKey != "" {
+		smsNotifier = server.TextBeeNotifier{APIKey: textbeeKey, DeviceID: os.Getenv("TEXTBEE_DEVICE_ID")}
+		log.Println("using TextBee notifier")
+	}
+
+	n := server.MultiNotifier{Email: emailNotifier, SMS: smsNotifier}
 
 	s := server.New(st, n, secret)
 	

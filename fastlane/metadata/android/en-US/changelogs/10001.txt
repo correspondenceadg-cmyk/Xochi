@@ -1,0 +1,3 @@
+- Added TextBee SMS alerts
+- Added Volume Down 5x panic trigger
+- F-Droid release prep
