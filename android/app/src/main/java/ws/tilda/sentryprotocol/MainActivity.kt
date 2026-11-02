@@ -200,7 +200,11 @@ class MainActivity : ComponentActivity() {
                 val body = json.toRequestBody("application/json".toMediaType())
                 val req = Request.Builder().url("$API_BASE/v1/interval/$tripId/extend").post(body).build()
                 val res = client.newCall(req).execute()
-                val obj = JSONObject(res.body?.string() ?: "")
+                val responseBody = res.body?.string() ?: ""
+                if (!res.isSuccessful || responseBody.trimStart().startsWith("<")) {
+                    throw Exception("HTTP ${res.code}: ${responseBody.take(150)}")
+                }
+                val obj = JSONObject(responseBody)
                 val newExp = obj.getLong("expires_at")
                 prefs.edit().putLong("active_trip_expires_at", newExp).apply()
                 runOnUiThread { expiresAt = newExp; vibrate() }

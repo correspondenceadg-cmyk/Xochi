@@ -38,7 +38,16 @@ class TrackingService : Service(), LocationListener {
             .setSmallIcon(android.R.drawable.ic_menu_compass)
             .build()
             
-        startForeground(1, notification)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(1, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+            } else {
+                startForeground(1, notification)
+            }
+        } catch (e: Exception) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
         startLocationUpdates()
         return START_STICKY
     }
