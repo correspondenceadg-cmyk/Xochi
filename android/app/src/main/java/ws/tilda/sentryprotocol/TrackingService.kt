@@ -19,7 +19,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 class TrackingService : Service(), LocationListener {
     private val client = OkHttpClient()
     private var tripId: String = ""
-    private val API_BASE = "https://xochi.deplexo.com"
+    private val API_BASE = "https://xochiquetzal.de.deplexo.com"
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         tripId = intent?.getStringExtra("TRIP_ID") ?: return START_NOT_STICKY

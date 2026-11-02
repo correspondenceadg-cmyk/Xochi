@@ -171,7 +171,10 @@ class MainActivity : ComponentActivity() {
                     vibrate()
                 }
             } catch (e: Exception) {
-                runOnUiThread { Toast.makeText(this@MainActivity, "Failed to connect", Toast.LENGTH_SHORT).show() }
+                runOnUiThread { 
+                    Toast.makeText(this@MainActivity, "Error: ${e.message}", Toast.LENGTH_LONG).show() 
+                    android.util.Log.e("XochiNetwork", "Connection failed", e)
+                }
             } finally {
                 runOnUiThread { isStarting = false }
             }
