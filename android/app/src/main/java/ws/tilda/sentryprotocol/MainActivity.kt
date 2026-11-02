@@ -1,3 +1,4 @@
+
 package ws.tilda.sentryprotocol
 
 import android.Manifest
@@ -64,9 +65,12 @@ class MainActivity : ComponentActivity() {
     private var tripId by mutableStateOf("")
     private var expiresAt by mutableStateOf(0L)
     private var graceSecs by mutableStateOf(0)
-    private var isStarting by mutableStateOf(false) // Global loading state
+    private var isStarting by mutableStateOf(false)
     private var alertMessage by mutableStateOf<String?>(null)
     private val client = OkHttpClient.Builder()
+        .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+        .protocols(listOf(okhttp3.Protocol.HTTP_1_1))
         .addInterceptor { chain ->
             val request = chain.request().newBuilder()
                 .header("User-Agent", "Mozilla/5.0 (Android) Xochi/1.0")
@@ -120,24 +124,20 @@ class MainActivity : ComponentActivity() {
                     onDistress = { triggerDistress() },
                     onPanic = { triggerPanic() }
                 )
-                alertMessage?.let { msg ->
-                    androidx.compose.material3.AlertDialog(
+                if (alertMessage != null) {
+                    AlertDialog(
                         onDismissRequest = { alertMessage = null },
-                        title = { androidx.compose.material3.Text("Notice") },
-                        text = { androidx.compose.material3.Text(msg) },
+                        title = { Text("Notice") },
+                        text = { Text(alertMessage!!) },
                         confirmButton = {
-                            androidx.compose.material3.TextButton(onClick = { 
-                                alertMessage = null 
+                            TextButton(onClick = {
+                                alertMessage = null
                                 if (tripId.isNotEmpty()) {
                                     getSharedPreferences("xochi_prefs", Context.MODE_PRIVATE).edit().remove("active_trip_id").remove("active_trip_expires_at").remove("active_trip_grace").apply()
                                     tripId = ""
                                     expiresAt = 0L
                                 }
-                            }) { androidx.compose.material3.Text("OK") }
-                        }
-                    }) { androidx.compose.material3.Text("OK") }
-                        }
-                    }) { androidx.compose.material3.Text("OK") }
+                            }) { Text("OK") }
                         }
                     )
                 }
@@ -201,8 +201,6 @@ class MainActivity : ComponentActivity() {
                     val intent = Intent(this@MainActivity, TrackingService::class.java)
                     intent.putExtra("TRIP_ID", newId)
                     ContextCompat.startForegroundService(this@MainActivity, intent)
-                } else {
-                    throw Exception("Location permission missing. Cannot start tracking.")
                 }
 
                 runOnUiThread {
@@ -213,7 +211,7 @@ class MainActivity : ComponentActivity() {
                 }
             } catch (e: Throwable) {
                 runOnUiThread { 
-                    Toast.makeText(this@MainActivity, "Error: ${e.message ?: e.toString()}", Toast.LENGTH_LONG).show() 
+                    alertMessage = "Error: ${e.message ?: e.toString()}"
                     android.util.Log.e("XochiNetwork", "Connection failed", e)
                 }
             } finally {
@@ -238,7 +236,9 @@ class MainActivity : ComponentActivity() {
                 val newExp = obj.getLong("expires_at")
                 prefs.edit().putLong("active_trip_expires_at", newExp).apply()
                 runOnUiThread { expiresAt = newExp; vibrate() }
-            } catch (e: Throwable) { }
+            } catch (e: Throwable) { 
+                runOnUiThread { alertMessage = "Extend Failed: ${e.message}" }
+            }
         }
     }
 
@@ -261,7 +261,6 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun triggerDistress() {
-        val prefs = getSharedPreferences("xochi_prefs", Context.MODE_PRIVATE)
         val currentId = tripId
         CoroutineScope(Dispatchers.IO).launch {
             if (currentId.isNotEmpty()) {
@@ -279,8 +278,7 @@ class MainActivity : ComponentActivity() {
                     runOnUiThread { alertMessage = "Distress Failed: ${e.message}" }
                 }
             } else {
-                prefs.edit().remove("active_trip_id").remove("active_trip_expires_at").remove("active_trip_grace").apply()
-                runOnUiThread { tripId = ""; expiresAt = 0L }
+                runOnUiThread { alertMessage = "No active trip found." }
             }
         }
     }
@@ -306,7 +304,7 @@ class MainActivity : ComponentActivity() {
                     .post("{}".toRequestBody("application/json".toMediaType()))
                     .build()
                 client.newCall(distressReq).execute()
-            } catch (e: Throwable) { }
+            } catch (e: Exception) { }
             prefs.edit().remove("active_trip_id").remove("active_trip_expires_at").remove("active_trip_grace").apply()
             runOnUiThread {
                 finishAffinity()
@@ -322,7 +320,7 @@ class MainActivity : ComponentActivity() {
 fun getCustomFont(): FontFamily {
     return try {
         FontFamily(androidx.compose.ui.text.font.Font(R.font.el_abogado_loco))
-    } catch (e: Throwable) {
+    } catch (e: Exception) {
         FontFamily.Serif
     }
 }
@@ -536,7 +534,7 @@ fun ActiveTripScreen(tripId: String, expiresAt: Long, graceSecs: Int, onSafe: ()
     val infiniteTransition = rememberInfiniteTransition(label = "alarm")
     val alarmColor by infiniteTransition.animateColor(
         initialValue = Color(0xFF0F172A),
-        targetValue = Color(0xFFFF0000), // Negative/Dark Red flash
+        targetValue = Color(0xFFFF0000),
         animationSpec = infiniteRepeatable(
             animation = tween(500, easing = LinearEasing),
             repeatMode = RepeatMode.Reverse
@@ -630,7 +628,6 @@ fun SettingsScreen(prefs: android.content.SharedPreferences, onClose: () -> Unit
     var gracePeriodStr by remember { mutableStateOf(prefs.getInt("grace_period", 60).toString()) }
     var coverPin by remember { mutableStateOf(prefs.getString("cover_mode_pin", "1234") ?: "1234") }
     
-    // New state for Auth Type
     var authType by remember { mutableStateOf(prefs.getString("cover_mode_auth", "pin") ?: "pin") }
     var dropdownExpanded by remember { mutableStateOf(false) }
 
@@ -668,7 +665,7 @@ fun SettingsScreen(prefs: android.content.SharedPreferences, onClose: () -> Unit
                         CoroutineScope(Dispatchers.Main).launch {
                             Toast.makeText(context, "Test alert sent", Toast.LENGTH_LONG).show()
                         }
-                    } catch (e: Throwable) {
+                    } catch (e: Exception) {
                         CoroutineScope(Dispatchers.Main).launch {
                             Toast.makeText(context, "Failed to send", Toast.LENGTH_SHORT).show()
                         }
@@ -835,11 +832,10 @@ fun TimerCoverScreen(prefs: android.content.SharedPreferences, onTripleTap: () -
                                 if (intent != null && activity != null) {
                                     biometricLauncher.launch(intent)
                                 } else {
-                                    // Fallback if no system pin/pattern is set
                                     showPinDialog = true
                                 }
                             }
-                            else -> showPinDialog = true // "pin"
+                            else -> showPinDialog = true
                         }
                     }
                 },
@@ -920,18 +916,15 @@ fun TimerCoverScreen(prefs: android.content.SharedPreferences, onTripleTap: () -
                 )
             },
             confirmButton = {
-                            androidx.compose.material3.TextButton(onClick = { 
-                                alertMessage = null 
-                                if (tripId.isNotEmpty()) {
-                                    getSharedPreferences("xochi_prefs", Context.MODE_PRIVATE).edit().remove("active_trip_id").remove("active_trip_expires_at").remove("active_trip_grace").apply()
-                                    tripId = ""
-                                    expiresAt = 0L
-                                }
-                            }) { androidx.compose.material3.Text("OK") }
-                        }
-                    }) { androidx.compose.material3.Text("OK") }
-                        }
-                    }) { Text("Unlock") }
+                TextButton(onClick = {
+                    if (pinInput == savedPin) {
+                        showPinDialog = false
+                        pinInput = ""
+                        onExitCover()
+                    } else {
+                        pinInput = ""
+                    }
+                }) { Text("Unlock") }
             },
             dismissButton = {
                 TextButton(onClick = { showPinDialog = false; pinInput = "" }) { Text("Cancel") }
