@@ -20,8 +20,8 @@ android {
         applicationId = "ws.tilda.sentryprotocol"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1102
-        versionName = "0.11.2"
+        versionCode = 1104
+        versionName = "0.11.4"
     }
 
     signingConfigs {
