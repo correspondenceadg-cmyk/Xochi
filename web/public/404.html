@@ -1,4 +1,6 @@
 <script>
   sessionStorage.redirect = location.href;
+  const isGhPages = location.hostname.includes('github.io');
+  const target = isGhPages ? '/Xochi/' : '/';
+  window.location.replace(target);
 </script>
-<meta http-equiv="refresh" content="0;URL='/Xochi/'">

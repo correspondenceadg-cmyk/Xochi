@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.0.2] - 2026-11-02
+### Added
+- Dynamic PWA deployment (supports both GitHub Pages and Vercel seamlessly).
+- Root `vercel.json` for monorepo build configuration.
+
 ## [1.0.1] - 2026-11-02
 ### Added
 - **TextBee SMS Integration:** Emergency contacts can now be phone numbers, and alerts will be sent via SMS.

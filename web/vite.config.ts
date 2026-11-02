@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 
 export default defineConfig({
-  base: '/Xochi/',
+  // Vercel sets process.env.VERCEL automatically during builds
+  base: process.env.VERCEL ? '/' : '/Xochi/',
 })
