@@ -126,7 +126,14 @@ class MainActivity : ComponentActivity() {
                         title = { androidx.compose.material3.Text("Notice") },
                         text = { androidx.compose.material3.Text(msg) },
                         confirmButton = {
-                            androidx.compose.material3.TextButton(onClick = { alertMessage = null }) { androidx.compose.material3.Text("OK") }
+                            androidx.compose.material3.TextButton(onClick = { 
+                                alertMessage = null 
+                                if (tripId.isNotEmpty()) {
+                                    getSharedPreferences("xochi_prefs", Context.MODE_PRIVATE).edit().remove("active_trip_id").remove("active_trip_expires_at").remove("active_trip_grace").apply()
+                                    tripId = ""
+                                    expiresAt = 0L
+                                }
+                            }) { androidx.compose.material3.Text("OK") }
                         }
                     )
                 }
@@ -498,7 +505,7 @@ fun ActiveTripScreen(tripId: String, expiresAt: Long, graceSecs: Int, onSafe: ()
             val enableAction = prefs.getBoolean("enable_notification_action", true)
 
             val builder = NotificationCompat.Builder(context, "xochi_alerts")
-                .setSmallIcon(android.R.drawable.ic_dialog_alert)
+                .setSmallIcon(R.drawable.ic_launcher)
                 .setContentTitle("Time Lapsed")
                 .setContentText("Your walking timer has ended. Tap \"I'm Safe\" or a distress signal will be sent.")
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
