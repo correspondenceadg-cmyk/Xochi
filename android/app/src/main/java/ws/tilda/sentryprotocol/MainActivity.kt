@@ -137,6 +137,8 @@ class MainActivity : ComponentActivity() {
                         }
                     }) { androidx.compose.material3.Text("OK") }
                         }
+                    }) { androidx.compose.material3.Text("OK") }
+                        }
                     )
                 }
             }
@@ -511,7 +513,8 @@ fun ActiveTripScreen(tripId: String, expiresAt: Long, graceSecs: Int, onSafe: ()
             val enableAction = prefs.getBoolean("enable_notification_action", true)
 
             val builder = NotificationCompat.Builder(context, "xochi_alerts")
-                .setSmallIcon(R.drawable.ic_notification)
+                .setSmallIcon(android.R.drawable.ic_menu_compass)
+                .setLargeIcon(android.graphics.drawable.Icon.createWithResource(context, R.drawable.logo))
                 .setContentTitle("Time Lapsed")
                 .setContentText("Your walking timer has ended. Tap \"I'm Safe\" or a distress signal will be sent.")
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -925,6 +928,8 @@ fun TimerCoverScreen(prefs: android.content.SharedPreferences, onTripleTap: () -
                                     expiresAt = 0L
                                 }
                             }) { androidx.compose.material3.Text("OK") }
+                        }
+                    }) { androidx.compose.material3.Text("OK") }
                         }
                     }) { Text("Unlock") }
             },

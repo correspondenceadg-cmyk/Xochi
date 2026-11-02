@@ -36,7 +36,7 @@ class TrackingService : Service(), LocationListener {
             val notification = androidx.core.app.NotificationCompat.Builder(this, "xochi_channel")
                 .setContentTitle("Timer Active")
                 .setContentText("Tracking safety window...")
-                .setSmallIcon(R.drawable.ic_notification)
+                .setSmallIcon(android.R.drawable.ic_menu_compass)
                 .setPriority(androidx.core.app.NotificationCompat.PRIORITY_LOW)
                 .build()
                 
