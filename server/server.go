@@ -200,9 +200,17 @@ func (s *Server) distress(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
+	var deliveryErrors int
 	for i, c := range contactsToNotify {
 		s.Store.SetAckToken(r.Context(), id, c, ackTokens[i])
-		s.deliver(r.Context(), id, c, ackTokens[i], *alert)
+		if err := s.deliver(r.Context(), id, c, ackTokens[i], *alert); err != nil {
+			slog.Error("deliver_failed", "trip", id[:8], "contact", c, "error", err)
+			deliveryErrors++
+		}
+	}
+	if deliveryErrors > 0 {
+		writeJSON(w, 500, map[string]string{"error": "Email delivery failed. Check Brevo API configuration on server."})
+		return
 	}
 	slog.Warn("trip_distress", "trip", id[:8])
 	writeJSON(w, 200, map[string]any{"state": guardian.Distress})

@@ -509,7 +509,7 @@ fun ActiveTripScreen(tripId: String, expiresAt: Long, graceSecs: Int, onSafe: ()
     val infiniteTransition = rememberInfiniteTransition(label = "alarm")
     val alarmColor by infiniteTransition.animateColor(
         initialValue = Color(0xFF0F172A),
-        targetValue = Color(0xFF7F1D1D),
+        targetValue = Color(0xFFFF0000), // Negative/Dark Red flash
         animationSpec = infiniteRepeatable(
             animation = tween(500, easing = LinearEasing),
             repeatMode = RepeatMode.Reverse
@@ -519,26 +519,32 @@ fun ActiveTripScreen(tripId: String, expiresAt: Long, graceSecs: Int, onSafe: ()
 
     val displayMins = (Math.max(0L, remaining) / 60).toInt()
     val displaySecs = (Math.max(0L, remaining) % 60).toInt()
+    
+    val graceLeft = graceSecs.toLong() - Math.abs(remaining)
+    val gMins = (Math.max(0L, graceLeft) / 60).toInt()
+    val gSecs = (Math.max(0L, graceLeft) % 60).toInt()
 
     Column(
-        modifier = Modifier.fillMaxSize().background(if (inGrace && !alerted) alarmColor else Color(0xFF0F172A)).padding(24.dp),
+        modifier = Modifier.fillMaxSize().background(if (alerted) alarmColor else Color(0xFF0F172A)).padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
         when {
             alerted -> {
-                Text("ALERT SENT", color = Color(0xFFEF4444), fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                Text("ALERT SENT", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(16.dp))
-                Text("Your contacts have been notified with your last location.", color = Color(0xFF94A3B8), textAlign = TextAlign.Center)
+                Text("Your contacts have been notified with your last location.", color = Color.White, textAlign = TextAlign.Center)
                 Spacer(modifier = Modifier.height(32.dp))
                 Button(onClick = onSafe, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(8.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E293B))) {
                     Text("Return Home", color = Color.White, fontSize = 18.sp)
                 }
             }
             inGrace -> {
-                Text("TIME LAPSED", color = Color(0xFFEF4444), fontSize = 32.sp, fontWeight = FontWeight.Bold)
+                Text("WARNING", color = Color(0xFFFF0000), fontSize = 32.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("GRACE PERIOD ACTIVE", color = Color(0xFFFF0000), fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(16.dp))
-                Text("Tap \"I'm Safe\" or a distress signal will be sent.", color = Color.White, textAlign = TextAlign.Center)
+                Text("${gMins.toString().padStart(2, '0')}:${gSecs.toString().padStart(2, '0')}", color = Color.White, fontSize = 64.sp, fontWeight = FontWeight.Light, fontFamily = FontFamily.Monospace)
                 Spacer(modifier = Modifier.height(32.dp))
                 Button(onClick = onSafe, modifier = Modifier.fillMaxWidth().height(64.dp), shape = RoundedCornerShape(8.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))) {
                     Text("I'm Safe", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
