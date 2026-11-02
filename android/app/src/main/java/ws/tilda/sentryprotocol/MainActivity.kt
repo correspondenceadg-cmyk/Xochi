@@ -135,6 +135,8 @@ class MainActivity : ComponentActivity() {
                                 }
                             }) { androidx.compose.material3.Text("OK") }
                         }
+                    }) { androidx.compose.material3.Text("OK") }
+                        }
                     )
                 }
             }
@@ -239,19 +241,19 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun closeTrip(action: String) {
-        val prefs = getSharedPreferences("xochi_prefs", Context.MODE_PRIVATE)
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val req = Request.Builder()
                     .url("$API_BASE/v1/interval/$tripId/$action")
                     .post("{}".toRequestBody("application/json".toMediaType()))
                     .build()
-                client.newCall(req).execute()
-            } catch (e: Throwable) { }
-            prefs.edit().remove("active_trip_id").remove("active_trip_expires_at").remove("active_trip_grace").apply()
-            runOnUiThread {
-                tripId = ""
-                expiresAt = 0L
+                val res = client.newCall(req).execute()
+                if (!res.isSuccessful) {
+                    throw Exception("HTTP ${res.code}: ${res.body?.string()}")
+                }
+                runOnUiThread { alertMessage = if (action == "safe") "Marked Safe" else "Distress Sent!" }
+            } catch (e: Throwable) {
+                runOnUiThread { alertMessage = "Action Failed: ${e.message}" }
             }
         }
     }
@@ -266,13 +268,17 @@ class MainActivity : ComponentActivity() {
                         .url("$API_BASE/v1/interval/$currentId/distress")
                         .post("{}".toRequestBody("application/json".toMediaType()))
                         .build()
-                    client.newCall(req).execute()
-                } catch (e: Throwable) { }
-            }
-            prefs.edit().remove("active_trip_id").remove("active_trip_expires_at").remove("active_trip_grace").apply()
-            runOnUiThread {
-                tripId = ""
-                expiresAt = 0L
+                    val res = client.newCall(req).execute()
+                    if (!res.isSuccessful) {
+                        throw Exception("HTTP ${res.code}: ${res.body?.string()}")
+                    }
+                    runOnUiThread { alertMessage = "Distress Sent!" }
+                } catch (e: Throwable) {
+                    runOnUiThread { alertMessage = "Distress Failed: ${e.message}" }
+                }
+            } else {
+                prefs.edit().remove("active_trip_id").remove("active_trip_expires_at").remove("active_trip_grace").apply()
+                runOnUiThread { tripId = ""; expiresAt = 0L }
             }
         }
     }
@@ -505,7 +511,7 @@ fun ActiveTripScreen(tripId: String, expiresAt: Long, graceSecs: Int, onSafe: ()
             val enableAction = prefs.getBoolean("enable_notification_action", true)
 
             val builder = NotificationCompat.Builder(context, "xochi_alerts")
-                .setSmallIcon(R.drawable.ic_launcher)
+                .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle("Time Lapsed")
                 .setContentText("Your walking timer has ended. Tap \"I'm Safe\" or a distress signal will be sent.")
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -911,15 +917,16 @@ fun TimerCoverScreen(prefs: android.content.SharedPreferences, onTripleTap: () -
                 )
             },
             confirmButton = {
-                TextButton(onClick = {
-                    if (pinInput == savedPin) {
-                        showPinDialog = false
-                        pinInput = ""
-                        onExitCover()
-                    } else {
-                        pinInput = ""
-                    }
-                }) { Text("Unlock") }
+                            androidx.compose.material3.TextButton(onClick = { 
+                                alertMessage = null 
+                                if (tripId.isNotEmpty()) {
+                                    getSharedPreferences("xochi_prefs", Context.MODE_PRIVATE).edit().remove("active_trip_id").remove("active_trip_expires_at").remove("active_trip_grace").apply()
+                                    tripId = ""
+                                    expiresAt = 0L
+                                }
+                            }) { androidx.compose.material3.Text("OK") }
+                        }
+                    }) { Text("Unlock") }
             },
             dismissButton = {
                 TextButton(onClick = { showPinDialog = false; pinInput = "" }) { Text("Cancel") }
