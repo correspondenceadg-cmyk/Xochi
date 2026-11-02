@@ -5,6 +5,7 @@
 - Location data deleted 24h after closure.
 - Third-party tracking (no analytics, no external fonts).
 - **Cover Mode:** Disguises the app as a timer. If triggered, it fires a silent distress signal and blanks the screen. No network requests leak the user's intent visually.
+- **Ack Links:** Emergency contacts receive an email with a secure token to acknowledge the alert.
 
 **NOT Protected:**
 - An attacker with access to your unlocked phone can press "Safe".

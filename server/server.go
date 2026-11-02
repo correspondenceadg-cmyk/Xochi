@@ -43,7 +43,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/tick", s.tick)
 	mux.HandleFunc("POST /v1/test-alert", s.testAlert)
 	mux.HandleFunc("GET /v1/contact/verify/{token}", s.verify)
-	mux.HandleFunc("POST /v1/contact/ack/{token}", s.ack)
+	mux.HandleFunc("GET /v1/contact/ack/{token}", s.ack)
 	mux.HandleFunc("GET /v1/contact/revoke/{token}", s.revoke)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		notifierType := "log"

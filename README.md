@@ -17,7 +17,7 @@ go test ./...
 ```bash
 cd web
 npm install
-npm Run dev
+npm run dev
 ```
 
 ### Android
@@ -32,4 +32,4 @@ unset GRAdle_OPT
 ./gradlew assembleRelease
 ```
 
-The APK will be located at `android/app/build/outputs/apk/release/app-release.apk`. Alternatively, push a tag (e.g., `v0.9.5`) to trigger the automated release pipeline.
+The APK will be located at `android/app/build/outputs/apk/release/app-release.apk`. Alternatively, push a tag (e.g., `v0.11.1`) to trigger the automated release pipeline.

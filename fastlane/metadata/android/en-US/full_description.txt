@@ -1,0 +1,7 @@
+Xochi is a trip-scoped safety check-in. Set a timer for your walk. If you don't tap "Safe" before time runs out, we'll alert your emergency contact with your last known location.
+
+Features:
+- Timer with customizable grace period
+- Emergency distress button
+- Background location tracking
+- Cover Mode: Disguises the app as a simple stopwatch for stealth operation.

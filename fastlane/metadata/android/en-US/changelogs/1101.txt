@@ -1,0 +1,3 @@
+- Fixed email acknowledgment links (GET request)
+- Added F-Droid metadata
+- Cleaned up web assets
