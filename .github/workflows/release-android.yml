@@ -48,7 +48,10 @@ jobs:
           gradle assembleRelease
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: android/app/build/outputs/apk/release/app-release.apk
-          fail_on_unmatched_files: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create ${{ github.ref_name }} \
+            android/app/build/outputs/apk/release/app-release.apk \
+            --title "Xochi ${{ github.ref_name }}" \
+            --generate-notes

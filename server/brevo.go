@@ -34,7 +34,8 @@ func (b BrevoNotifier) send(to, subject, text string) error {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
@@ -52,6 +53,10 @@ func (b BrevoNotifier) SendConsent(to, from, token string) error {
 }
 
 func (b BrevoNotifier) SendAlert(t Trip, to, ackToken string) error {
-	text := fmt.Sprintf("No check-in from trip %s.\nAck here: https://xochiquetzal.de.deplexo.com/v1/contact/ack/%s", t.ID, ackToken)
+	text := "No check-in from your Xochi trip.\n"
+	if t.HasLoc && t.Lat != nil && t.Lon != nil {
+		text += fmt.Sprintf("Last known location: https://maps.google.com/?q=%f,%f\n", *t.Lat, *t.Lon)
+	}
+	text += fmt.Sprintf("Acknowledge here: https://xochiquetzal.de.deplexo.com/v1/contact/ack/%s", ackToken)
 	return b.send(to, "[Guardian] Missed check-in", text)
 }

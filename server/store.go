@@ -15,7 +15,7 @@ type Trip struct {
 	Contacts            []string
 	Message             string
 	HasLoc              bool
-	Lat, Lon            float64
+	Lat, Lon            *float64
 	LocAt               int64
 	Notified            bool
 	LastAlertAt         int64

@@ -270,21 +270,26 @@ function renderActive() {
 async function closeTrip(action: 'safe' | 'distress') {
   clearInterval(state.timerInterval);
   document.body.classList.remove('alarm');
-  await fetch(`${API_BASE}/v1/interval/${state.id}/${action}`, { method: 'POST' });
-  localStorage.clear();
-  
-  app.innerHTML = `
-    <div class="container">
-      ${LOGO_SVG}
-      <h1>${action === 'safe' ? 'Safe & Sound' : 'Help is on the way'}</h1>
+  try {
+    const res = await fetch(`${API_BASE}/v1/interval/${state.id}/${action}`, { method: 'POST' });
+    if (!res.ok) throw new Error(await res.text());
+    localStorage.clear();
+    
+    app.innerHTML = `
+      <div class="container">
+        ${LOGO_SVG}
+        <h1>${action === 'safe' ? 'Safe & Sound' : 'Help is on the way'}</h1>
       <p class="subtitle">
         ${action === 'safe' 
           ? 'Your trip was marked safe. No contacts were alerted.' 
           : 'Your distress signal was sent to your contacts immediately.'}
       </p>
-      <button class="btn btn-secondary" onclick="location.reload()">Return to Home</button>
-    </div>
-  `;
+        <button class="btn btn-secondary" onclick="location.reload()">Return to Home</button>
+      </div>
+    `;
+  } catch (e) {
+    alert(`Action failed: ${e}`);
+  }
 }
 
 // Init

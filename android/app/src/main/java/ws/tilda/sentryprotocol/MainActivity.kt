@@ -266,6 +266,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun closeTrip(action: String) {
+        stopService(Intent(this, TrackingService::class.java))
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val req = Request.Builder()
@@ -285,6 +286,7 @@ class MainActivity : ComponentActivity() {
 
     private fun triggerDistress() {
         val currentId = tripId
+        stopService(Intent(this, TrackingService::class.java))
         CoroutineScope(Dispatchers.IO).launch {
             if (currentId.isNotEmpty()) {
                 try {
@@ -307,16 +309,19 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun triggerPanic() {
+        stopService(Intent(this, TrackingService::class.java))
         val prefs = getSharedPreferences("xochi_prefs", Context.MODE_PRIVATE)
         val currentId = tripId
-        val email = prefs.getString("contact_email", "emergency@example.com") ?: "emergency@example.com"
+        val contactInput = prefs.getString("contact_input", "emergency@example.com") ?: "emergency@example.com"
+        val contactsList = contactInput.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+        val contactsJson = contactsList.joinToString(prefix = "[", postfix = "]") { "\"$it\"" }
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val targetId = if (currentId.isNotEmpty()) {
                     currentId
                 } else {
-                    val json = """{"window_minutes":1,"grace_secs":0,"contacts":["$email"],"message":"Panic trigger"}"""
+                    val json = """{"window_minutes":1,"grace_secs":0,"contacts":$contactsJson,"message":"Panic trigger"}"""
                     val body = json.toRequestBody("application/json".toMediaType())
                     val req = Request.Builder().url("$API_BASE/v1/interval").post(body).build()
                     val res = client.newCall(req).execute()
@@ -581,7 +586,7 @@ fun ActiveTripScreen(tripId: String, expiresAt: Long, graceSecs: Int, onSafe: ()
             alerted -> {
                 Text("ALERT SENT", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(16.dp))
-                Text("Your contacts have been notified with your last location.", color = Color.White, textAlign = TextAlign.Center)
+                Text("Your contacts have been notified.", color = Color.White, textAlign = TextAlign.Center)
                 Spacer(modifier = Modifier.height(32.dp))
                 Button(onClick = onSafe, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(8.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E293B))) {
                     Text("Return Home", color = Color.White, fontSize = 18.sp)
@@ -649,7 +654,7 @@ fun SettingsScreen(prefs: android.content.SharedPreferences, onClose: () -> Unit
     var tapWindowStr by remember { mutableStateOf(prefs.getInt("tap_window", 1500).toString()) }
     var contactInput by remember { mutableStateOf(prefs.getString("contact_input", "emergency@example.com") ?: "") }
     var gracePeriodStr by remember { mutableStateOf(prefs.getInt("grace_period", 60).toString()) }
-    var coverPin by remember { mutableStateOf(prefs.getString("cover_mode_pin", "1234") ?: "1234") }
+    var coverPin by remember { mutableStateOf(prefs.getString("cover_mode_pin", "") ?: "") }
     
     var authType by remember { mutableStateOf(prefs.getString("cover_mode_auth", "pin") ?: "pin") }
     var dropdownExpanded by remember { mutableStateOf(false) }
@@ -927,7 +932,7 @@ fun TimerCoverScreen(prefs: android.content.SharedPreferences, onTripleTap: () -
     }
 
     if (showPinDialog) {
-        val savedPin = prefs.getString("cover_mode_pin", "1234") ?: "1234"
+        val savedPin = prefs.getString("cover_mode_pin", "") ?: ""
         AlertDialog(
             onDismissRequest = { showPinDialog = false; pinInput = "" },
             title = { Text("Enter PIN") },

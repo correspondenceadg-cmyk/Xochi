@@ -41,10 +41,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/interval/{id}/ping", s.ping)
 	mux.HandleFunc("GET /v1/interval/{id}/status", s.status)
 	mux.HandleFunc("POST /v1/tick", s.tick)
-	mux.HandleFunc("POST /v1/test-alert", s.testAlert)
-	mux.HandleFunc("GET /v1/contact/verify/{token}", s.verify)
+	mux.HandleFunc("GET /v1/contact/verify/{token}", s.verifyPage)
+	mux.HandleFunc("POST /v1/contact/verify/{token}", s.verifyAction)
 	mux.HandleFunc("GET /v1/contact/ack/{token}", s.ack)
-	mux.HandleFunc("GET /v1/contact/revoke/{token}", s.revoke)
+	mux.HandleFunc("GET /v1/contact/revoke/{token}", s.revokePage)
+	mux.HandleFunc("POST /v1/contact/revoke/{token}", s.revokeAction)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		notifierType := "log"
 		if _, ok := s.Notifier.(BrevoNotifier); ok {
@@ -193,11 +194,7 @@ func (s *Server) distress(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		alert = a
-		t.Notified = true
-		for _, c := range t.Contacts {
-			contactsToNotify = append(contactsToNotify, c)
-			ackTokens = append(ackTokens, newID())
-		}
+		// Do not set Notified=true here. Let tick() process the alert and retries.
 		return nil
 	})
 	if err != nil {
@@ -205,13 +202,6 @@ func (s *Server) distress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var deliveryErrors int
-	for i, c := range contactsToNotify {
-		s.Store.SetAckToken(r.Context(), id, c, ackTokens[i])
-		if err := s.deliver(r.Context(), id, c, ackTokens[i], *alert); err != nil {
-			slog.Error("deliver_failed", "trip", id[:8], "contact", c, "error", err)
-			deliveryErrors++
-		}
-	}
 	if deliveryErrors > 0 {
 		writeJSON(w, 500, map[string]string{"error": "Email delivery failed. Check Brevo API configuration on server."})
 		return
@@ -266,66 +256,69 @@ func (s *Server) tick(w http.ResponseWriter, r *http.Request) {
 
 	processed, alerts := 0, 0
 	for _, id := range s.Store.Pending(r.Context()) {
-		var alert *guardian.Alert
-		var contactToNotify string
-		var ackToken string
-
-		err := s.Store.Update(r.Context(), id, func(t *Trip) error {
-			if !t.State.Closed() {
-				alert = t.Tick(s.Now())
-			} else if !t.Notified {
-				if t.NextContactPriority <= len(t.Contacts) && (t.LastAlertAt == 0 || s.Now()-t.LastAlertAt >= 300) {
-					contactToNotify = t.Contacts[t.NextContactPriority-1]
-					ackToken = newID()
-
-					t.LastAlertAt = s.Now()
-					t.NextContactPriority++
-					if t.NextContactPriority > len(t.Contacts) {
-						t.Notified = true
-					}
-
-					if alert == nil {
-						alert = &guardian.Alert{Kind: t.State, At: t.ClosedAt}
-					}
-				}
-			}
-			return nil
-		})
-		if err != nil {
-			continue
+		if s.processTrip(id) {
+			alerts++
 		}
 		processed++
-		if alert != nil && contactToNotify != "" {
-			alerts++
-			s.Store.SetAckToken(r.Context(), id, contactToNotify, ackToken)
-			err := s.deliver(r.Context(), id, contactToNotify, ackToken, *alert)
-			if err != nil {
-				s.Store.Update(r.Context(), id, func(t *Trip) error {
-					if t.LastAlertAt == s.Now() {
-						t.LastAlertAt = 0
-						t.NextContactPriority--
-					}
-					return nil
-				})
-			}
-		}
 	}
 	writeJSON(w, 200, map[string]any{"processed": processed, "alerts": alerts, "at": s.Now()})
 }
 
-func (s *Server) testAlert(w http.ResponseWriter, r *http.Request) {
-	var in struct{ Email string }
-	if err := decode(w, r, &in); err != nil || !strings.Contains(in.Email, "@") {
-		fail(w, errors.New("valid email required"))
-		return
+func (s *Server) processTrip(id string) bool {
+	var alert *guardian.Alert
+	var contactToNotify string
+	var ackToken string
+	var now = s.Now()
+
+	err := s.Store.Update(context.Background(), id, func(t *Trip) error {
+		if !t.State.Closed() {
+			alert = t.Tick(now)
+		} else if !t.Notified {
+			verified, _ := s.Store.GetConsent(context.Background(), t.Contacts[t.NextContactPriority-1])
+			if !verified {
+				t.NextContactPriority++
+				return nil
+			}
+			if t.NextContactPriority <= len(t.Contacts) && (t.LastAlertAt == 0 || now-t.LastAlertAt >= 300) {
+				contactToNotify = t.Contacts[t.NextContactPriority-1]
+				ackToken = newID()
+
+				t.LastAlertAt = now
+				t.NextContactPriority++
+				if t.NextContactPriority > len(t.Contacts) {
+					t.Notified = true
+				}
+
+				if alert == nil {
+					alert = &guardian.Alert{Kind: t.State, At: t.ClosedAt}
+				}
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return false
 	}
-	t := Trip{Interval: guardian.Interval{ID: "test1234"}}
-	if err := s.Notifier.SendAlert(t, in.Email, "test-token"); err != nil {
-		fail(w, err)
-		return
+	
+	if alert != nil && contactToNotify != "" {
+		s.Store.SetAckToken(context.Background(), id, contactToNotify, ackToken)
+		err := s.deliver(context.Background(), id, contactToNotify, ackToken, *alert)
+		if err != nil {
+			s.Store.Update(context.Background(), id, func(t *Trip) error {
+				if t.LastAlertAt == now {
+					t.LastAlertAt = 0
+					t.NextContactPriority--
+				}
+				return nil
+			})
+			return false
+		}
+		return true
 	}
-	writeJSON(w, 200, map[string]string{"status": "sent"})
+	return false
 }
+
+
 
 func (s *Server) deliver(ctx context.Context, id, contact, ackToken string, a guardian.Alert) error {
 	t, err := s.Store.Get(ctx, id)
@@ -358,6 +351,53 @@ func (s *Server) ack(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) revoke(w http.ResponseWriter, r *http.Request) {
+	token := r.PathValue("token")
+	hash := sha256.Sum256([]byte(token))
+	err := s.Store.RevokeConsent(r.Context(), hex.EncodeToString(hash[:]))
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	w.Write([]byte("revoked"))
+}
+
+func (s *Server) verifyPage(w http.ResponseWriter, r *http.Request) {
+	token := r.PathValue("token")
+	w.Header().Set("Content-Type", "text/html")
+	w.Write([]byte(fmt.Sprintf(`<html><body style="background:#0f172a;color:#fff;font-family:sans-serif;text-align:center;padding:50px;"><h2>Verify Contact</h2><form method="POST"><button style="padding:10px 20px;font-size:16px;background:#38bdf8;border:none;border-radius:5px;cursor:pointer;">Click to Verify</button></form></body></html>`, token)))
+}
+func (s *Server) verifyAction(w http.ResponseWriter, r *http.Request) {
+	token := r.PathValue("token")
+	hash := sha256.Sum256([]byte(token))
+	err := s.Store.VerifyConsent(r.Context(), hex.EncodeToString(hash[:]))
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	w.Write([]byte("verified"))
+}
+
+func (s *Server) ackPage(w http.ResponseWriter, r *http.Request) {
+	token := r.PathValue("token")
+	w.Header().Set("Content-Type", "text/html")
+	w.Write([]byte(`<html><body style="background:#0f172a;color:#fff;font-family:sans-serif;text-align:center;padding:50px;"><h2>Acknowledge Alert</h2><form method="POST"><button style="padding:10px 20px;font-size:16px;background:#10b981;color:#fff;border:none;border-radius:5px;cursor:pointer;">Acknowledge</button></form></body></html>`))
+}
+func (s *Server) ackAction(w http.ResponseWriter, r *http.Request) {
+	token := r.PathValue("token")
+	err := s.Store.Ack(r.Context(), token)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	w.Write([]byte("acknowledged"))
+}
+
+func (s *Server) revokePage(w http.ResponseWriter, r *http.Request) {
+	token := r.PathValue("token")
+	w.Header().Set("Content-Type", "text/html")
+	w.Write([]byte(`<html><body style="background:#0f172a;color:#fff;font-family:sans-serif;text-align:center;padding:50px;"><h2>Revoke Consent</h2><form method="POST"><button style="padding:10px 20px;font-size:16px;background:#ef4444;border:none;border-radius:5px;cursor:pointer;">Revoke</button></form></body></html>`))
+}
+func (s *Server) revokeAction(w http.ResponseWriter, r *http.Request) {
 	token := r.PathValue("token")
 	hash := sha256.Sum256([]byte(token))
 	err := s.Store.RevokeConsent(r.Context(), hex.EncodeToString(hash[:]))
