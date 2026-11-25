@@ -24,3 +24,7 @@
 
 ### Security
 - Rotated the Postgres database password.
+
+## [1.0.5] - 2026-11-25
+### Changed
+- Fixed Go server compile errors and enabled push-triggered CI/builds.

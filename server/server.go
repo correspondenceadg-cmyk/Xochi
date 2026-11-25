@@ -299,7 +299,7 @@ func (s *Server) processTrip(id string) bool {
 	if err != nil {
 		return false
 	}
-	
+
 	if alert != nil && contactToNotify != "" {
 		s.Store.SetAckToken(context.Background(), id, contactToNotify, ackToken)
 		err := s.deliver(context.Background(), id, contactToNotify, ackToken, *alert)
@@ -317,8 +317,6 @@ func (s *Server) processTrip(id string) bool {
 	}
 	return false
 }
-
-
 
 func (s *Server) deliver(ctx context.Context, id, contact, ackToken string, a guardian.Alert) error {
 	t, err := s.Store.Get(ctx, id)
