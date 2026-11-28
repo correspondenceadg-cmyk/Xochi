@@ -2,12 +2,11 @@ name: Release Android APK
 on:
   workflow_dispatch:
   push:
+    branches: [main]
     tags:
       - 'v*'
-
 permissions:
   contents: write
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -47,7 +46,14 @@ jobs:
           cd android
           gradle assembleRelease
 
+      - name: Upload Release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Xochi-Release
+          path: android/app/build/outputs/apk/release/app-release.apk
+
       - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

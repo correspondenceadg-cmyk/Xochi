@@ -28,3 +28,9 @@
 ## [1.0.5] - 2026-11-25
 ### Changed
 - Fixed Go server compile errors and enabled push-triggered CI/builds.
+
+## [1.0.6] - 2026-11-27
+### Changed
+- Fixed Go server compile errors.
+- Made signed release APK the default Android workflow.
+- Removed debug APK workflow.

@@ -103,6 +103,9 @@ func (s *Server) open(w http.ResponseWriter, r *http.Request) {
 	if in.GraceSecs < 0 {
 		in.GraceSecs = 0
 	}
+	if in.GraceSecs == 0 {
+		in.GraceSecs = s.GraceSecs
+	}
 	if len(in.Contacts) < 1 || len(in.Contacts) > 5 {
 		fail(w, errors.New("1-5 contacts required"))
 		return
@@ -185,27 +188,18 @@ func (s *Server) safe(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) distress(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	var alert *guardian.Alert
-	var contactsToNotify []string
-	var ackTokens []string
+
 	err := s.Store.Update(r.Context(), id, func(t *Trip) error {
-		a, err := t.Distress(s.Now())
-		if err != nil {
-			return err
-		}
-		alert = a
-		// Do not set Notified=true here. Let tick() process the alert and retries.
-		return nil
+		_, err := t.Distress(s.Now())
+		return err
 	})
 	if err != nil {
 		fail(w, err)
 		return
 	}
-	var deliveryErrors int
-	if deliveryErrors > 0 {
-		writeJSON(w, 500, map[string]string{"error": "Email delivery failed. Check Brevo API configuration on server."})
-		return
-	}
+
+	s.processTrip(id)
+
 	slog.Warn("trip_distress", "trip", id[:8])
 	writeJSON(w, 200, map[string]any{"state": guardian.Distress})
 }
@@ -216,13 +210,14 @@ func (s *Server) ping(w http.ResponseWriter, r *http.Request) {
 		fail(w, errors.New("bad coordinates"))
 		return
 	}
+	lat, lon := in.Lat, in.Lon
 	var st guardian.State
 	var exp int64
 	err := s.Store.Update(r.Context(), r.PathValue("id"), func(t *Trip) error {
 		if t.State.Closed() {
 			return guardian.ErrClosed
 		}
-		t.HasLoc, t.Lat, t.Lon, t.LocAt = true, in.Lat, in.Lon, s.Now()
+		t.HasLoc, t.Lat, t.Lon, t.LocAt = true, &lat, &lon, s.Now()
 		st, exp = t.State, t.ExpiresAt
 		return nil
 	})
@@ -265,34 +260,53 @@ func (s *Server) tick(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) processTrip(id string) bool {
+	now := s.Now()
 	var alert *guardian.Alert
 	var contactToNotify string
 	var ackToken string
-	var now = s.Now()
 
 	err := s.Store.Update(context.Background(), id, func(t *Trip) error {
+		if t.Notified {
+			return nil
+		}
+
 		if !t.State.Closed() {
 			alert = t.Tick(now)
-		} else if !t.Notified {
-			verified, _ := s.Store.GetConsent(context.Background(), t.Contacts[t.NextContactPriority-1])
-			if !verified {
-				t.NextContactPriority++
+			if alert == nil {
 				return nil
 			}
-			if t.NextContactPriority <= len(t.Contacts) && (t.LastAlertAt == 0 || now-t.LastAlertAt >= 300) {
-				contactToNotify = t.Contacts[t.NextContactPriority-1]
-				ackToken = newID()
+		} else {
+			alert = &guardian.Alert{Kind: t.State, At: t.ClosedAt}
+		}
 
-				t.LastAlertAt = now
-				t.NextContactPriority++
-				if t.NextContactPriority > len(t.Contacts) {
-					t.Notified = true
-				}
+		if t.NextContactPriority < 1 {
+			t.NextContactPriority = 1
+		}
 
-				if alert == nil {
-					alert = &guardian.Alert{Kind: t.State, At: t.ClosedAt}
-				}
+		for t.NextContactPriority <= len(t.Contacts) {
+			candidate := t.Contacts[t.NextContactPriority-1]
+			verified, _ := s.Store.GetConsent(context.Background(), candidate)
+			if verified {
+				break
 			}
+			t.NextContactPriority++
+		}
+
+		if t.NextContactPriority > len(t.Contacts) {
+			t.Notified = true
+			return nil
+		}
+
+		if t.LastAlertAt != 0 && now-t.LastAlertAt < 300 {
+			return nil
+		}
+
+		contactToNotify = t.Contacts[t.NextContactPriority-1]
+		ackToken = newID()
+		t.LastAlertAt = now
+		t.NextContactPriority++
+		if t.NextContactPriority > len(t.Contacts) {
+			t.Notified = true
 		}
 		return nil
 	})
@@ -300,22 +314,34 @@ func (s *Server) processTrip(id string) bool {
 		return false
 	}
 
-	if alert != nil && contactToNotify != "" {
-		s.Store.SetAckToken(context.Background(), id, contactToNotify, ackToken)
-		err := s.deliver(context.Background(), id, contactToNotify, ackToken, *alert)
-		if err != nil {
-			s.Store.Update(context.Background(), id, func(t *Trip) error {
-				if t.LastAlertAt == now {
-					t.LastAlertAt = 0
-					t.NextContactPriority--
-				}
-				return nil
-			})
-			return false
-		}
-		return true
+	if alert == nil || contactToNotify == "" {
+		return false
 	}
-	return false
+
+	if err := s.Store.SetAckToken(context.Background(), id, contactToNotify, ackToken); err != nil {
+		s.rollbackAlert(id, now)
+		return false
+	}
+
+	if err := s.deliver(context.Background(), id, contactToNotify, ackToken, *alert); err != nil {
+		s.rollbackAlert(id, now)
+		return false
+	}
+
+	return true
+}
+
+func (s *Server) rollbackAlert(id string, now int64) {
+	_ = s.Store.Update(context.Background(), id, func(t *Trip) error {
+		if t.LastAlertAt == now {
+			t.LastAlertAt = 0
+			if t.NextContactPriority > 1 {
+				t.NextContactPriority--
+			}
+			t.Notified = false
+		}
+		return nil
+	})
 }
 
 func (s *Server) deliver(ctx context.Context, id, contact, ackToken string, a guardian.Alert) error {
@@ -360,10 +386,10 @@ func (s *Server) revoke(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) verifyPage(w http.ResponseWriter, r *http.Request) {
-	token := r.PathValue("token")
 	w.Header().Set("Content-Type", "text/html")
-	w.Write([]byte(fmt.Sprintf(`<html><body style="background:#0f172a;color:#fff;font-family:sans-serif;text-align:center;padding:50px;"><h2>Verify Contact</h2><form method="POST"><button style="padding:10px 20px;font-size:16px;background:#38bdf8;border:none;border-radius:5px;cursor:pointer;">Click to Verify</button></form></body></html>`, token)))
+	w.Write([]byte(`<html><body style="background:#0f172a;color:#fff;font-family:sans-serif;text-align:center;padding:50px;"><h2>Verify Contact</h2><form method="POST"><button style="padding:10px 20px;font-size:16px;background:#38bdf8;border:none;border-radius:5px;cursor:pointer;">Click to Verify</button></form></body></html>`))
 }
+
 func (s *Server) verifyAction(w http.ResponseWriter, r *http.Request) {
 	token := r.PathValue("token")
 	hash := sha256.Sum256([]byte(token))
@@ -377,9 +403,11 @@ func (s *Server) verifyAction(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) ackPage(w http.ResponseWriter, r *http.Request) {
 	token := r.PathValue("token")
+	_ = token
 	w.Header().Set("Content-Type", "text/html")
 	w.Write([]byte(`<html><body style="background:#0f172a;color:#fff;font-family:sans-serif;text-align:center;padding:50px;"><h2>Acknowledge Alert</h2><form method="POST"><button style="padding:10px 20px;font-size:16px;background:#10b981;color:#fff;border:none;border-radius:5px;cursor:pointer;">Acknowledge</button></form></body></html>`))
 }
+
 func (s *Server) ackAction(w http.ResponseWriter, r *http.Request) {
 	token := r.PathValue("token")
 	err := s.Store.Ack(r.Context(), token)
@@ -392,9 +420,11 @@ func (s *Server) ackAction(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) revokePage(w http.ResponseWriter, r *http.Request) {
 	token := r.PathValue("token")
+	_ = token
 	w.Header().Set("Content-Type", "text/html")
 	w.Write([]byte(`<html><body style="background:#0f172a;color:#fff;font-family:sans-serif;text-align:center;padding:50px;"><h2>Revoke Consent</h2><form method="POST"><button style="padding:10px 20px;font-size:16px;background:#ef4444;border:none;border-radius:5px;cursor:pointer;">Revoke</button></form></body></html>`))
 }
+
 func (s *Server) revokeAction(w http.ResponseWriter, r *http.Request) {
 	token := r.PathValue("token")
 	hash := sha256.Sum256([]byte(token))

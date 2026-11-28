@@ -92,7 +92,7 @@ func (s *MemStore) Prune(ctx context.Context, now int64) error {
 	for _, t := range s.m {
 		if t.ClosedAt > 0 && t.ClosedAt < now-86400 {
 			t.HasLoc = false
-			t.Lat, t.Lon = 0, 0
+			t.Lat, t.Lon = nil, nil
 			t.LocAt = 0
 		}
 	}
